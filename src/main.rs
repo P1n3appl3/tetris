@@ -7,7 +7,7 @@ mod sound;
 
 use game::{Direction, Game, Inputs};
 use graphics::RawMode;
-use input::{Event, EventLoop, KeyEvent};
+use input::{EventLoop, KeyEvent};
 use keys::*;
 use sound::Player;
 
@@ -27,7 +27,7 @@ fn main() {
 fn run_game(game: &mut Game, input: &EventLoop, keys: &Bindings, player: &Player) -> bool {
     let mut inputs = Inputs::default();
     let mut main_loop = LoopHelper::builder().build_with_target_rate(60.0);
-    let (mut width, mut height) = get_size();
+    let (width, height) = get_size();
     if width < 40 || height < 22 {
         panic!("screen too small");
     }
@@ -45,18 +45,10 @@ fn run_game(game: &mut Game, input: &EventLoop, keys: &Bindings, player: &Player
         };
 
         while let Ok(event) = input.events.try_recv() {
-            use Event::*;
             match event {
-                Quit => return false,
-                Restart => return true,
-                Resize => {
-                    (width, height) = get_size();
-                    // eprintln!("resized {width} {height}");
-                    if width < 40 || height < 22 {
-                        panic!("screen too small");
-                    }
-                }
-                Key(KeyEvent(c, _, true)) => {
+                KeyEvent('q', ..) | KeyEvent('c', CTRL, ..) => return false,
+                KeyEvent('r', _, true) => return true,
+                KeyEvent(c, _, true) => {
                     if c == keys.left {
                         inputs.dir = Some(Direction::Left);
                         inputs.left = true;
@@ -75,7 +67,7 @@ fn run_game(game: &mut Game, input: &EventLoop, keys: &Bindings, player: &Player
                         inputs.rotate = Some(Direction::Left);
                     }
                 }
-                Key(KeyEvent(c, _, false)) => {
+                KeyEvent(c, _, false) => {
                     if c == keys.left {
                         inputs.left = false;
                     } else if c == keys.right {

@@ -1,3 +1,4 @@
+#![allow(unused)]
 pub const SHIFT: u8 = 0b1;
 pub const ALT: u8 = 0b10;
 pub const CTRL: u8 = 0b100;
