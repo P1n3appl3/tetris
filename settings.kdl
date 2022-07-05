@@ -1,0 +1,41 @@
+// reserved keys:
+// "q" / ctrl+c: quit
+// "r": restart
+bindings {
+    left "left"
+    right "right"
+    cw "x"
+    ccw "z"
+    hard "up"
+    soft "down"
+    hold "shift"
+}
+
+// all values are specified in frames
+config {
+    das 8
+    arr 0
+    gravity 60
+    soft_drop 2
+    ghost true
+    // these mirror the 3 jstris lock delays:
+    lock 30
+    extended 300
+    timeout 1200
+}
+
+// these settings are closer to a standard tetris game like puyo-puyo tetris
+// config {das 10; arr 2; gravity 60; soft_drop 4; ghost true; lock_delay 30 300 1200;}
+
+sound {
+    volume 0.5
+    ready "sounds/ready.ogg"
+    go "sounds/go.ogg"
+    move "sounds/move.ogg"
+    rotate null
+    lock "sounds/lock.ogg"
+    line "sounds/line.ogg"
+    hold null
+    lose "sounds/topout.ogg"
+    win null
+}
