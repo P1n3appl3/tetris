@@ -1,30 +1,19 @@
 use crate::keys::*;
 use anyhow::{anyhow, Result};
-use nix::sys::signal::{self, SaFlags, SigAction, SigHandler, SigSet};
-use once_cell::sync::OnceCell;
 
 use std::{
     io::{self, Read},
     slice, str,
-    sync::mpsc::{self, Receiver, SyncSender},
+    sync::mpsc::{self, Receiver},
     thread,
 };
 
 #[derive(Debug, Clone, Copy)]
 pub struct KeyEvent(pub char, pub u8, pub bool);
 
-#[derive(Debug, Clone)]
-pub enum Event {
-    Quit,
-    Restart,
-    Resize,
-    Key(KeyEvent),
-}
-
 impl EventLoop {
     pub fn start() -> Self {
         let (tx, rx) = mpsc::sync_channel(32);
-        register_signal_handler(tx.clone());
 
         thread::spawn(move || {
             let mut stdin = io::stdin().lock();
@@ -33,12 +22,7 @@ impl EventLoop {
                 let n = stdin.read(&mut buf).unwrap();
                 // eprintln!("{n}");
                 if let Ok(k) = parse_kitty_key(unsafe { slice::from_raw_parts(buf.as_ptr(), n) }) {
-                    tx.send(match k {
-                        KeyEvent('q', ..) | KeyEvent('c', CTRL, ..) => Event::Quit,
-                        KeyEvent('r', _, true) => Event::Restart,
-                        _ => Event::Key(k),
-                    })
-                    .unwrap();
+                    tx.send(k).unwrap();
                 }
             }
         });
@@ -48,24 +32,7 @@ impl EventLoop {
 }
 
 pub struct EventLoop {
-    pub events: Receiver<Event>,
-}
-
-static SIGTX: OnceCell<SyncSender<Event>> = OnceCell::new();
-
-// TODO: figure out why i'm not seeing signals on window size change
-fn register_signal_handler(tx: SyncSender<Event>) {
-    SIGTX.set(tx).unwrap();
-    extern "C" fn handler(_n: i32) {
-        // eprintln!("signal: {n}");
-        SIGTX.get().unwrap().send(Event::Resize).unwrap();
-    }
-    let mut signals = SigSet::empty();
-    signals.add(signal::SIGWINCH);
-    let sig_action = SigAction::new(SigHandler::Handler(handler), SaFlags::empty(), signals);
-    unsafe {
-        signal::sigaction(signal::SIGINT, &sig_action).unwrap();
-    }
+    pub events: Receiver<KeyEvent>,
 }
 
 fn parse_kitty_key(buf: &[u8]) -> Result<KeyEvent> {

@@ -11,7 +11,7 @@ dependencies = [
  "alsa-sys",
  "bitflags",
  "libc",
- "nix 0.23.1",
+ "nix",
 ]
 
 [[package]]
@@ -177,7 +177,7 @@ dependencies = [
  "mach",
  "ndk",
  "ndk-glue",
- "nix 0.23.1",
+ "nix",
  "oboe",
  "parking_lot",
  "stdweb",
@@ -484,17 +484,6 @@ dependencies = [
  "cfg-if",
  "libc",
  "memoffset",
-]
-
-[[package]]
-name = "nix"
-version = "0.24.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f17df307904acd05aa8e32e97bb20f2a0df1728bbc2d771ae8f9a90463441e9"
-dependencies = [
- "bitflags",
- "cfg-if",
- "libc",
 ]
 
 [[package]]
@@ -920,9 +909,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "kdl",
- "lazy_static",
  "libc",
- "nix 0.24.1",
  "once_cell",
  "rand",
  "rodio",

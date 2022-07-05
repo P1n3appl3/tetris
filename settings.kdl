@@ -18,7 +18,7 @@ config {
     gravity 60
     soft_drop 2
     ghost true
-    // these mirror the 3 jstris lock delays:
+    // these mirror the 3 jstris lock delays
     lock 30
     extended 300
     timeout 1200
