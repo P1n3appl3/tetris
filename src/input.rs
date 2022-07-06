@@ -20,7 +20,6 @@ impl EventLoop {
             let mut buf = [0; 64];
             loop {
                 let n = stdin.read(&mut buf).unwrap();
-                // eprintln!("{n}");
                 if let Ok(k) = parse_kitty_key(unsafe { slice::from_raw_parts(buf.as_ptr(), n) }) {
                     tx.send(k).unwrap();
                 }

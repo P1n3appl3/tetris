@@ -76,7 +76,7 @@ pub fn draw_piece(piece: Piece, origin: (i8, i8)) -> Result<()> {
 pub fn draw_text(origin: (i8, i8), (r, g, b): (u8, u8, u8), content: &str) -> Result<()> {
     let mut lock = io::stdout().lock();
     move_cursor(&mut lock, origin)?;
-    write!(lock, "\x1b[38;{r};{g};{b};0m{content}")?;
+    write!(lock, "\x1b[38;2;{r};{g};{b}m{content}")?;
     Ok(lock.flush()?)
 }
 
@@ -95,14 +95,11 @@ pub fn draw_board(g: &Game, origin: (i8, i8)) -> Result<()> {
 
     let mut lock = io::stdout().lock();
     let o = &mut lock;
-    // write!(o, "\x1b[38;2;255;128;0m")?;
     set_color(o, BG_COLOR)?;
-    write!(o, "\x1b[2J")?;
+    write!(o, csi!("2J"))?;
     move_cursor(o, (ox, oy))?;
-    // write!(o, "╭────────────────────╮")?;
     for y in 0..20 {
         move_cursor(o, (ox, oy + y as i8 + 1))?;
-        // write!(o, "│")?;
         for x in 0..10 {
             let y = 19 - y;
             let mut color = g.board[y][x]
@@ -126,11 +123,7 @@ pub fn draw_board(g: &Game, origin: (i8, i8)) -> Result<()> {
             set_color(o, color)?;
             write!(o, "  ")?;
         }
-        // set_color(o, BG_COLOR)?;
-        // write!(o, "│")?;
     }
-    // move_cursor(o, (ox, oy + 21))?;
-    // write!(o, "╰────────────────────╯")?;
     o.flush()?;
     Ok(())
 }
@@ -164,9 +157,9 @@ impl Drop for RawMode {
         fn reset_state(orig: Termios) -> Result<()> {
             let mut lock = io::stdout().lock();
             tcsetattr(lock.as_raw_fd(), TCSADRAIN, &orig)?;
+            write!(lock, csi!("<u"))?; // restore keyboard mode
             write!(lock, csi!("?1049l"))?; // switch back from alternate screen
             write!(lock, csi!("?25h"))?; // show cursor
-            write!(lock, csi!("<u"))?; // restore keyboard mode
             Ok(lock.flush()?)
         }
         reset_state(self.original).unwrap();

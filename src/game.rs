@@ -17,13 +17,13 @@ pub enum Piece {
     Z,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Direction {
     Left,
     Right,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(u8)]
 pub enum Rotation {
     North,
@@ -32,7 +32,7 @@ pub enum Rotation {
     West,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct Inputs {
     pub dir: Option<Direction>,
     pub rotate: Option<Direction>,
@@ -43,13 +43,13 @@ pub struct Inputs {
     pub hold: bool,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct Config {
     pub das: u8,
     pub arr: u8,
     pub gravity: u16,
     pub soft_drop: u8,
-    pub lock_delay: (u16, u16, u16),
+    pub lock_delay: (u8, u16, u16),
     pub ghost: bool,
 }
 
@@ -60,7 +60,7 @@ pub struct Timers {
     pub arr: i8,
     pub soft: i8,
     pub gravity: u16,
-    pub lock: u16,
+    pub lock: u8,
     pub extended: u16,
     pub timeout: u16,
 }
@@ -73,7 +73,7 @@ pub enum GameState {
     Running,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Game {
     pub board: [[Option<Piece>; 10]; 23],
     pub upcomming: VecDeque<Piece>,
@@ -84,8 +84,9 @@ pub struct Game {
     pub timers: Timers,
     pub last_dir: Direction,
     pub can_hold: bool,
-    pub current_frame: usize,
+    pub current_frame: u16,
     pub state: GameState,
+    pub rng: StdRng,
 }
 
 impl Rotation {
@@ -132,19 +133,31 @@ impl Piece {
 }
 
 impl Game {
-    pub fn new() -> Self {
-        let mut game = Self::default();
-        game.fill_bag();
-        game
+    pub fn new(config: Config) -> Self {
+        Self {
+            config,
+            rng: StdRng::from_entropy(),
+            board: Default::default(),
+            upcomming: Default::default(),
+            current: (Piece::I, (0, 0), Rotation::North),
+            hold: None,
+            lines: 0,
+            timers: Default::default(),
+            last_dir: Direction::Left,
+            can_hold: true,
+            current_frame: Default::default(),
+            state: GameState::Done,
+        }
     }
 
-    pub fn start(&mut self) {
+    pub fn start(&mut self, seed: u64) {
         self.state = GameState::Startup;
         self.board = Default::default();
         self.hold = None;
         self.current_frame = 0;
         self.lines = 0;
         self.upcomming.clear();
+        self.rng = StdRng::seed_from_u64(seed);
         self.fill_bag();
         while let Some(Piece::Z | Piece::S) = self.upcomming.front() {
             self.pop_piece();
@@ -322,7 +335,7 @@ impl Game {
     fn fill_bag(&mut self) -> &mut Self {
         use Piece::*;
         let mut pieces = [I, J, L, O, S, T, Z];
-        pieces.shuffle(&mut thread_rng());
+        pieces.shuffle(&mut self.rng);
         self.upcomming.extend(pieces);
         self
     }
@@ -415,25 +428,6 @@ impl Game {
     }
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            lock_delay: (30, 300, 1200),
-            das: 10,
-            arr: 2,
-            gravity: 60,
-            soft_drop: 4,
-            ghost: true,
-        }
-    }
-}
-
-impl Default for GameState {
-    fn default() -> Self {
-        Self::Startup
-    }
-}
-
 impl Default for Timers {
     fn default() -> Self {
         Self {
@@ -446,24 +440,6 @@ impl Default for Timers {
             extended: 0,
             timeout: 0,
         }
-    }
-}
-
-impl Default for Direction {
-    fn default() -> Self {
-        Self::Left
-    }
-}
-
-impl Default for Rotation {
-    fn default() -> Self {
-        Self::North
-    }
-}
-
-impl Default for Piece {
-    fn default() -> Self {
-        Self::I
     }
 }
 
