@@ -2,13 +2,21 @@ mod game;
 mod graphics;
 mod input;
 mod keys;
+mod replay;
 mod settings;
 mod sound;
 
-use game::{Direction, Game, Inputs};
+use std::{
+    fs::OpenOptions,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+use game::{Direction, Game, GameState, Inputs};
 use graphics::RawMode;
 use input::{EventLoop, KeyEvent};
 use keys::*;
+use rand::prelude::*;
+use replay::{Input, Replay};
 use sound::Player;
 
 use spin_sleep::LoopHelper;
@@ -19,8 +27,7 @@ fn main() {
     let _mode = RawMode::enter();
     let input = EventLoop::start();
     let (config, keys, player) = settings::load().unwrap();
-    let mut game = Game::new();
-    game.config = config;
+    let mut game = Game::new(config);
     while run_game(&mut game, &input, &keys, &player) {}
 }
 
@@ -32,9 +39,11 @@ fn run_game(game: &mut Game, input: &EventLoop, keys: &Bindings, player: &Player
         panic!("screen too small");
     }
 
-    game.start();
+    let seed = thread_rng().gen();
+    game.start(seed);
+    let mut replay = Replay::new(game.config, seed);
 
-    loop {
+    let done = 'outer: loop {
         let _delta = main_loop.loop_start();
         // preserve held inputs
         inputs = Inputs {
@@ -46,34 +55,44 @@ fn run_game(game: &mut Game, input: &EventLoop, keys: &Bindings, player: &Player
 
         while let Ok(event) = input.events.try_recv() {
             match event {
-                KeyEvent('q', ..) | KeyEvent('c', CTRL, ..) => return false,
-                KeyEvent('r', _, true) => return true,
+                KeyEvent('q', ..) | KeyEvent('c', CTRL, ..) => break 'outer false,
+                KeyEvent('r', _, true) => break 'outer true,
                 KeyEvent(c, _, true) => {
                     if c == keys.left {
                         inputs.dir = Some(Direction::Left);
                         inputs.left = true;
+                        replay.push(game, Input::Left, true);
                     } else if c == keys.right {
                         inputs.dir = Some(Direction::Right);
                         inputs.right = true;
+                        replay.push(game, Input::Right, true);
                     } else if c == keys.soft {
                         inputs.soft = true;
+                        replay.push(game, Input::Soft, true);
                     } else if c == keys.hard {
                         inputs.hard = true;
+                        replay.push(game, Input::Hard, true);
                     } else if c == keys.hold {
-                        inputs.hold = true
+                        inputs.hold = true;
+                        replay.push(game, Input::Hold, true);
                     } else if c == keys.cw {
                         inputs.rotate = Some(Direction::Right);
+                        replay.push(game, Input::Cw, true);
                     } else if c == keys.ccw {
                         inputs.rotate = Some(Direction::Left);
+                        replay.push(game, Input::Ccw, true);
                     }
                 }
                 KeyEvent(c, _, false) => {
                     if c == keys.left {
                         inputs.left = false;
+                        replay.push(game, Input::Left, false);
                     } else if c == keys.right {
                         inputs.right = false;
+                        replay.push(game, Input::Right, false);
                     } else if c == keys.soft {
                         inputs.soft = false;
+                        replay.push(game, Input::Soft, false);
                     }
                 }
             }
@@ -110,11 +129,25 @@ fn run_game(game: &mut Game, input: &EventLoop, keys: &Bindings, player: &Player
             format!("{secs}.{millis:02} ")
         };
         graphics::draw_text((ox + 1, oy + 20), text_color, &time).unwrap();
-        // graphics::draw_text((ox + 32, oy + 19), text_color, "lines").unwrap();
-        // graphics::draw_text((ox + 32, oy + 20), text_color, "left").unwrap();
-
         main_loop.loop_sleep();
+    };
+
+    if game.state == GameState::Done {
+        let replayfile = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(format!(
+                "replays/{}.bin",
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("time went backwards")
+                    .as_secs()
+            ))
+            .unwrap();
+        replay.total_frames = game.current_frame - 120;
+        replay.save(replayfile).unwrap();
     }
+    done
 }
 
 pub struct Bindings {

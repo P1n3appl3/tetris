@@ -26,7 +26,7 @@ pub fn load() -> Result<(Config, Bindings, Player)> {
         gravity: get_config("gravity", config)? as u16,
         soft_drop: get_config("soft_drop", config)? as u8,
         lock_delay: (
-            get_config("lock", config)? as u16,
+            get_config("lock", config)? as u8,
             get_config("extended", config)? as u16,
             get_config("timeout", config)? as u16,
         ),
