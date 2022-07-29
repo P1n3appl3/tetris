@@ -23,9 +23,10 @@ pub enum Direction {
     Right,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 #[repr(u8)]
 pub enum Rotation {
+    #[default]
     North,
     East,
     South,

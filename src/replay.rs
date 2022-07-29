@@ -26,6 +26,9 @@ pub struct Event {
     input: Input,
 }
 
+// TODO: write a PRNG compatible with the one jstris uses so that seeds can be shared
+// harddrop.com/forums/index.php%3Fs=&showtopic=7087&view=findpost&p=92057
+// also rework soft-drop config to match jstris's
 #[derive(Debug)]
 pub struct Replay {
     pub total_frames: u16,
@@ -72,7 +75,7 @@ impl Replay {
         w.write_all(&self.config.lock_delay.2.to_le_bytes())?;
         w.write_all(&self.events.len().to_le_bytes())?;
         for event in self.events.iter() {
-            let input = (event.input as u8) << 4;
+            let input = (event.input as u8) << 4 | (event.press as u8) << 7;
             if event.timestamp < 15 {
                 w.write_all(&[input | event.timestamp as u8])?;
             } else {
@@ -80,7 +83,7 @@ impl Replay {
                 if event.timestamp < 128 {
                     w.write_all(&[event.timestamp as u8])?;
                 } else {
-                    let first = event.timestamp as u8 & 0x7F;
+                    let first = (event.timestamp | 0x80) as u8;
                     let second = (event.timestamp >> 7) as u8;
                     w.write_all(&[first, second])?;
                 }

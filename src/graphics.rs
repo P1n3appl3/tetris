@@ -48,7 +48,7 @@ fn set_color(o: &mut StdoutLock, (r, g, b): (u8, u8, u8)) -> Result<()> {
 }
 
 fn move_cursor(o: &mut StdoutLock, (x, y): (i8, i8)) -> Result<()> {
-    Ok(write!(o, "{}{};{}H", csi!("?"), y + 1, x + 1)?)
+    Ok(write!(o, "{}{};{}H", csi!(), y + 1, x + 1)?)
 }
 
 pub fn draw_piece(piece: Piece, origin: (i8, i8)) -> Result<()> {
