@@ -44,7 +44,7 @@ pub struct Inputs {
     pub hold: bool,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Config {
     pub das: u8,
     pub arr: u8,

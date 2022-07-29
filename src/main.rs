@@ -7,7 +7,7 @@ mod settings;
 mod sound;
 
 use std::{
-    fs::OpenOptions,
+    fs::File,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -133,19 +133,19 @@ fn run_game(game: &mut Game, input: &EventLoop, keys: &Bindings, player: &Player
     };
 
     if game.state == GameState::Done {
-        let replayfile = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(format!(
-                "replays/{}.bin",
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .expect("time went backwards")
-                    .as_secs()
-            ))
-            .unwrap();
+        let time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs();
         replay.total_frames = game.current_frame - 120;
-        replay.save(replayfile).unwrap();
+        {
+            let replayfile = File::create(format!("replays/{time}.bin")).unwrap();
+            replay.save(replayfile).unwrap();
+        }
+        // does it round-trip?
+        replay.current_frame = 0;
+        let replayfile = File::open(format!("replays/{time}.bin")).unwrap();
+        assert_eq!(replay, Replay::load(replayfile).unwrap());
     }
     done
 }
