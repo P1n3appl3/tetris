@@ -5,7 +5,7 @@ use std::fs;
 use crate::{game::Config, keys, sound::Player, Bindings};
 
 pub fn load() -> Result<(Config, Bindings, Player)> {
-    // todo: use dir-rs for config dir
+    // todo: use dir-rs/dirs/xdg for config dir
     let doc: KdlDocument = fs::read_to_string("settings.kdl")?.parse()?;
     let config = doc
         .get("config")
