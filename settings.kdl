@@ -28,7 +28,7 @@ config {
 // config {das 10; arr 2; gravity 60; soft_drop 4; ghost true; lock_delay 30 300 1200;}
 
 sound {
-    volume 0.5
+    volume 0.3
     ready "sounds/ready.ogg"
     go "sounds/go.ogg"
     move "sounds/move.ogg"
