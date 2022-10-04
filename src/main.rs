@@ -11,7 +11,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use game::{Direction, Game, GameState, Inputs};
+use game::{Direction, Game, GameState, Inputs, Rotate};
 use graphics::RawMode;
 use input::{EventLoop, KeyEvent};
 use keys::*;
@@ -76,11 +76,13 @@ fn run_game(game: &mut Game, input: &EventLoop, keys: &Bindings, player: &Player
                         inputs.hold = true;
                         replay.push(game, Input::Hold, true);
                     } else if c == keys.cw {
-                        inputs.rotate = Some(Direction::Right);
+                        inputs.rotate = Some(Rotate::Right);
                         replay.push(game, Input::Cw, true);
                     } else if c == keys.ccw {
-                        inputs.rotate = Some(Direction::Left);
+                        inputs.rotate = Some(Rotate::Left);
                         replay.push(game, Input::Ccw, true);
+                    } else if Some(c) == keys.rotate_180 {
+                        inputs.rotate = Some(Rotate::Double);
                     }
                 }
                 KeyEvent(c, _, false) => {
@@ -157,6 +159,7 @@ pub struct Bindings {
     pub hard: char,
     pub cw: char,
     pub ccw: char,
+    pub rotate_180: Option<char>,
     pub hold: char,
 }
 
@@ -169,6 +172,7 @@ impl Default for Bindings {
             hard: UP,
             cw: 'x',
             ccw: 'z',
+            rotate_180: Some('a'),
             hold: LEFT_SHIFT,
         }
     }
