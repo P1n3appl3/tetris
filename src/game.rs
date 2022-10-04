@@ -23,6 +23,14 @@ pub enum Direction {
     Right,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum Rotate {
+    Left,
+    Right,
+    /// 180º rotate
+    Double,
+}
+
 #[derive(Copy, Clone, Debug, Default)]
 #[repr(u8)]
 pub enum Rotation {
@@ -36,7 +44,7 @@ pub enum Rotation {
 #[derive(Default, Clone, Debug)]
 pub struct Inputs {
     pub dir: Option<Direction>,
-    pub rotate: Option<Direction>,
+    pub rotate: Option<Rotate>,
     pub left: bool,
     pub right: bool,
     pub soft: bool,
@@ -238,8 +246,8 @@ impl Game {
         }
 
         // rotation
-        if let Some(dir) = inputs.rotate {
-            if self.try_rotate(dir) {
+        if let Some(rot_ev) = inputs.rotate {
+            if self.try_rotate(rot_ev) {
                 self.timers.lock = 0;
                 self.timers.extended = 0;
                 player.play("rotate").ok();
@@ -402,7 +410,32 @@ impl Game {
         self.spawn(piece)
     }
 
-    fn try_rotate(&mut self, dir: Direction) -> bool {
+    fn try_rotate(&mut self, rot_ev: Rotate) -> bool {
+        use {Rotate::*, Direction as D};
+        match rot_ev {
+            Left => self.try_rotate_inner(D::Left),
+            Right => self.try_rotate_inner(D::Right),
+            Double => {
+                // this is almost certainly not correct...
+
+                // this is: bad and brittle
+                let backup = self.current;
+                if self.try_rotate_inner(D::Left) && self.try_rotate_inner(D::Left) {
+                    return true;
+                }
+
+                self.current = backup;
+                if self.try_rotate_inner(D::Right) && self.try_rotate_inner(D::Right) {
+                    return true;
+                }
+
+                self.current = backup;
+                false
+            },
+        }
+    }
+
+    fn try_rotate_inner(&mut self, dir: Direction) -> bool {
         let (piece, pos, rot) = self.current;
         let new_rot = rot.rotate(dir);
         let new_pos = piece.get_pos(new_rot, pos);
