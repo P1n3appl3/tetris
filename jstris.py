@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from __future__ import annotations
+from typing import List
 from bs4 import BeautifulSoup
 from dataclasses import dataclass
 from datetime import timedelta, datetime, time
@@ -37,7 +38,7 @@ class Game:
         )
 
 
-def get_games(user) -> [Game]:
+def get_games(user) -> List[Game]:
     path = Path(user + ".games")
     games = []
 
@@ -94,7 +95,8 @@ def graph_times(games):
             mins.append((i, time))
 
     # plt.style.use('darcula')
-    # plt.style.use('gruvbox')
+    if Path("gruvbox").exists:
+        plt.style.use('gruvbox')
     plt.scatter(*(zip(*points)), s=1, label="times")
     plt.plot(*(zip(*avgs)), label="rolling average")
     plt.plot(*(zip(*avgsn)), label=f"average of {n}")
