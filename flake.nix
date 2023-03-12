@@ -13,9 +13,12 @@
   outputs = inputs@{ flu, nixpkgs, ... }: with flu.lib; eachDefaultSystem (system: let
     np = import nixpkgs { inherit system; };
     crane = inputs.crane.lib.${system};
+    inherit (np) lib;
 
     tetrisDeps = {
-      nativeBuildInputs = [];
+      nativeBuildInputs = lib.optionals np.stdenv.isLinux (with np; [
+        pkg-config alsa-lib
+      ]);
       buildInputs = with np;
         [ libiconv ] ++
         (lib.optional (stdenv.isDarwin)
