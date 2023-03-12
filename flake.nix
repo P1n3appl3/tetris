@@ -137,10 +137,17 @@
     packages = rec {
       tetris = t.package;
       default = tetris;
+      jstrisGraph = jstrisGraphPackage;
     };
     apps = rec {
       tetris = { type = "app"; program = np.lib.getExe t.package; };
-      default = tetris;
+      tetrisInKitty = {
+        type = "app";
+        program = lib.getExe (np.writeShellScriptBin "kitty-tetris" ''
+          ${lib.getExe np.kitty} ${tetris.program}
+        '');
+      };
+      default = tetrisInKitty;
       jstrisGraph = { type = "app"; program = np.lib.getExe jstrisGraphPackage; };
     };
     devShells.default = np.mkShell {
