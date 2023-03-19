@@ -17,11 +17,12 @@
 
     tetrisDeps = {
       nativeBuildInputs = lib.optionals np.stdenv.isLinux (with np; [
-        pkg-config alsa-lib
+        pkg-config makeWrapper # alsa-lib pipewire alsa-plugins alsa-plugins-wrapper
       ]);
       buildInputs = with np;
         [ libiconv ] ++
-        (lib.optional (stdenv.isDarwin)
+        (lib.optional (stdenv.isLinux) alsa-lib) ++
+        (lib.optionals (stdenv.isDarwin)
           (with darwin.apple_sdk.frameworks; [ AudioUnit CoreAudio np.xcbuild ]));
     } // (np.lib.optionalAttrs (np.stdenv.isDarwin) {
       # `coreaudio-sys` calls `bindgen` at build time _always_ :(
@@ -81,7 +82,12 @@
       package = let
         base = crane.buildPackage (commonArgs // {
           inherit cargoArtifacts;
-        });
+        } // (np.lib.optionalAttrs (np.stdenv.isLinux) {
+          postInstall = ''
+            wrapProgram $out/bin/tetris \
+              --set-default "ALSA_PLUGIN_DIR" "${np.alsa-plugins}/lib/alsa-lib"
+          '';
+        }));
       # See above.
       #
       # The build script on `coreaudio-sys` will run again if
