@@ -1,23 +1,28 @@
 {
-  description = "P1n3appl3's terminal tetris repo";
+  description = "tetris and related tools";
+  nixConfig = {
+    extra-substituters = [ "https://cache.garnix.io" ];
+    extra-trusted-public-keys = [ "cache.garnix.io:CTFPyKSLcx5RMJKfLo5EEPUObbA78b0YQ2DTCJXqr9g=" ];
+  };
 
   inputs = {
-    flu.url = github:numtide/flake-utils;
-    nixpkgs.url = github:nixos/nixpkgs/nixos-unstable;
+    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     crane = {
-      url = github:ipetkov/crane;
+      url = "github:ipetkov/crane";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
     };
   };
 
-  outputs = inputs@{ flu, nixpkgs, ... }: with flu.lib; eachDefaultSystem (system: let
+  outputs = inputs@{ nixpkgs, ... }: inputs.flake-utils.lib.eachDefaultSystem (system: let
     np = import nixpkgs { inherit system; };
     crane = inputs.crane.lib.${system};
     inherit (np) lib;
 
     tetrisDeps = {
       nativeBuildInputs = lib.optionals np.stdenv.isLinux (with np; [
-        pkg-config makeWrapper # alsa-lib pipewire alsa-plugins alsa-plugins-wrapper
+        pkg-config makeWrapper alsa-lib
       ]);
       buildInputs = with np;
         [ libiconv ] ++
