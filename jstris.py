@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from __future__ import annotations
+from typing import List
 from bs4 import BeautifulSoup
 from dataclasses import dataclass
 from datetime import timedelta, datetime, time
@@ -37,7 +38,7 @@ class Game:
         )
 
 
-def get_games(user) -> [Game]:
+def get_games(user) -> List[Game]:
     path = Path(user + ".games")
     games = []
 
@@ -84,7 +85,6 @@ def graph_times(games):
     avgs = []
     avgsn = []
     n = 50
-    running_avg = 0
     for (i, time) in points:
         sums.append(sums[-1] + time)
         if i >= n:
@@ -93,8 +93,6 @@ def graph_times(games):
         if time < mins[-1][-1]:
             mins.append((i, time))
 
-    # plt.style.use('darcula')
-    # plt.style.use('gruvbox')
     plt.scatter(*(zip(*points)), s=1, label="times")
     plt.plot(*(zip(*avgs)), label="rolling average")
     plt.plot(*(zip(*avgsn)), label=f"average of {n}")
@@ -116,7 +114,6 @@ def graph_faults(games):
     avgs = []
     avgsn = []
     n = 50
-    running_avg = 0
     for (i, time) in points:
         sums.append(sums[-1] + time)
         if i >= n:
@@ -125,7 +122,6 @@ def graph_faults(games):
         if time < mins[-1][-1]:
             mins.append((i, time))
 
-    # plt.style.use('gruvbox')
     plt.scatter(*(zip(*points)), s=3, label="faults")
     plt.plot(*(zip(*avgs)), label="rolling average")
     plt.plot(*(zip(*avgsn)), label=f"average of {n}")
@@ -140,6 +136,6 @@ if __name__ == "__main__":
     if not 1 < len(sys.argv) < 3:
         print("Usage:\n\t`python tetris.py <username>`")
         sys.exit(1)
-    games = get_games(sys.argv[1])
+    games = get_games(sys.argv[-1])
     graph_times(games)
     # graph_faults(games)

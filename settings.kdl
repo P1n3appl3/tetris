@@ -6,6 +6,7 @@ bindings {
     right "right"
     cw "x"
     ccw "z"
+    flip "a"
     hard "up"
     soft "down"
     hold "shift"

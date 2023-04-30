@@ -1,3 +1,6 @@
 /target
 *.txt
 *.games
+
+.direnv
+result

@@ -54,7 +54,7 @@ impl Replay {
         if matches!(game.state, GameState::Done | GameState::Lost) {
             return;
         }
-        let elapsed = (game.current_frame - self.current_frame) as u16;
+        let elapsed = game.current_frame - self.current_frame;
         self.current_frame = game.current_frame;
         self.events.push(Event {
             elapsed,

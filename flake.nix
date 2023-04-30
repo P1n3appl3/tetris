@@ -1,0 +1,155 @@
+{
+  description = "tetris and related tools";
+  nixConfig = {
+    extra-substituters = [ "https://cache.garnix.io" ];
+    extra-trusted-public-keys = [ "cache.garnix.io:CTFPyKSLcx5RMJKfLo5EEPUObbA78b0YQ2DTCJXqr9g=" ];
+  };
+
+  inputs = {
+    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    crane = {
+      url = "github:ipetkov/crane";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
+  };
+
+  outputs = inputs@{ nixpkgs, ... }: inputs.flake-utils.lib.eachDefaultSystem (system: let
+    np = import nixpkgs { inherit system; };
+    crane = inputs.crane.lib.${system};
+    inherit (np) lib;
+
+    tetrisDeps = {
+      nativeBuildInputs = lib.optionals np.stdenv.isLinux (with np; [
+        pkg-config makeWrapper alsa-lib
+      ]);
+      buildInputs = with np;
+        [ libiconv ] ++
+        (lib.optional (stdenv.isLinux) alsa-lib) ++
+        (lib.optionals (stdenv.isDarwin)
+          (with darwin.apple_sdk.frameworks; [ AudioUnit CoreAudio np.xcbuild ]));
+    } // (np.lib.optionalAttrs (np.stdenv.isDarwin) {
+      # `coreaudio-sys` calls `bindgen` at build time _always_ :(
+      LIBCLANG_PATH="${np.llvmPackages_11.libclang.lib}/lib";
+
+      # `coreaudio-sys` expects the headers for this packages to be available
+      # in a directory structure matching the MacOS SDKs.
+      #
+      # If we don't set this env var, `coreaudio-sys` will ask `xcrun` for the
+      # MacOS SDK path and the nix `xcrun` wrapper just points to a stub SDK
+      # without any frameworks or headers: https://github.com/NixOS/nixpkgs/blob/bcf1085724f62e860f2cddd2c6eaee7dceb22888/pkgs/development/tools/xcbuild/wrapper.nix#L54
+      #
+      # See:
+      #  - https://discourse.nixos.org/t/develop-shell-environment-setup-for-macos/11399/6
+      #  - https://github.com/RustAudio/coreaudio-sys/blob/8185e0704754a0d3e3c41e9557d24f5f406ce5ef/build.rs#L6
+      COREAUDIO_SDK_PATH = np.symlinkJoin {
+        name = "sdk";
+        paths = with np.darwin.apple_sdk.frameworks; [
+          # See: https://github.com/RustAudio/coreaudio-sys/blob/8185e0704754a0d3e3c41e9557d24f5f406ce5ef/build.rs#L50-L102
+          AudioToolbox
+          AudioUnit
+          CoreAudio
+          CoreFoundation
+          CoreMIDI
+          OpenAL
+        ];
+        postBuild = ''
+          mkdir $out/System
+          mv $out/Library $out/System
+        '';
+      };
+    });
+
+    tetris = let
+      addBindgenEnvVar = base: base.overrideAttrs (old: {
+          # (the above fixes for the macOS framework paths do not seem to be
+          # enough anymore; poking at `cbindgen` reveals that it now seems to
+          # "sanitize" our NIX_CFLAGS_COMPILE injected `-iframework` includes
+          # and turn them into regular `-isystem` includes, breaking
+          # framework headers. to get around this we use the inelegant
+          # "big hammer" solution below: forcibly reintroducing our
+          # `-iframework` flags to `cbindgen`'s list of flags passed to
+          # `libclang`):
+          preBuild = (old.preBuild or "") + np.lib.optionalString (np.stdenv.isDarwin) ''
+            export BINDGEN_EXTRA_CLANG_ARGS="$NIX_CFLAGS_COMPILE"
+          '';
+        });
+    in rec {
+      commonArgs = tetrisDeps // {
+        src = crane.cleanCargoSource ./.;
+      };
+
+      cargoArtifacts = let
+        base = crane.buildDepsOnly commonArgs;
+      in addBindgenEnvVar base;
+
+      package = let
+        base = crane.buildPackage (commonArgs // {
+          inherit cargoArtifacts;
+        } // (np.lib.optionalAttrs (np.stdenv.isLinux) {
+          postInstall = ''
+            wrapProgram $out/bin/tetris \
+              --set-default "ALSA_PLUGIN_DIR" "${np.alsa-plugins}/lib/alsa-lib"
+          '';
+        }));
+      # See above.
+      #
+      # The build script on `coreaudio-sys` will run again if
+      # `$BINDGEN_EXTRA_CLANG_ARGS` changes so we set it here too:
+      in addBindgenEnvVar base;
+
+      clippy = let
+        base = crane.cargoClippy (commonArgs // {
+          inherit cargoArtifacts;
+          cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+        });
+      in addBindgenEnvVar base;
+    };
+
+    jstrisGraphPackage = let
+      # TODO: why doesn't matplotlib use the tk backend on linux by default?
+      # see: https://github.com/NixOS/nixpkgs/issues/39637
+      py = np.python3.withPackages (ps: with ps;
+        [ beautifulsoup4 requests statistics (matplotlib.override { enableGtk3 = true; }) ]
+        # TODO: why does adding types-<foo> to my home-manager profile work with my-py,
+        # but not here? possibly nix-direnv's fault?
+        # supposedly fixed years ago by https://github.com/NixOS/nixpkgs/pull/82453
+        # which is a cute narrative PR, but doesn't work for me
+     ++ [ types-requests ] # no nix pkg for types-beautifulsoup4 or data-science-types
+      );
+    in np.stdenv.mkDerivation {
+      pname = "jstrisGraph";
+      version = "0.1.0";
+
+      src = ./jstris.py;
+      buildInputs = [py];
+      dontUnpack = "true";
+      installPhase = "install -Dm755 $src $out/bin/jstrisGraph";
+    };
+
+  in let t = tetris; in {
+    packages = rec {
+      tetris = t.package;
+      default = tetris;
+      jstrisGraph = jstrisGraphPackage;
+    };
+    apps = rec {
+      tetris = { type = "app"; program = np.lib.getExe t.package; };
+      tetrisInKitty = {
+        type = "app";
+        program = lib.getExe (np.writeShellScriptBin "kitty-tetris" ''
+          ${lib.getExe np.kitty} ${tetris.program}
+        '');
+      };
+      default = tetrisInKitty;
+      jstrisGraph = { type = "app"; program = np.lib.getExe jstrisGraphPackage; };
+    };
+    devShells.default = np.mkShell {
+      inputsFrom = [ tetris.package jstrisGraphPackage ];
+    };
+    checks = {
+      inherit (t) package clippy;
+    };
+  });
+}
