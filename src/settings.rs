@@ -42,6 +42,7 @@ pub fn load() -> Result<(Config, Bindings, Player)> {
         hard: get_binding("hard", bindings)?,
         cw: get_binding("cw", bindings)?,
         ccw: get_binding("ccw", bindings)?,
+        flip: get_binding("flip", bindings)?,
         hold: get_binding("hold", bindings)?,
     };
     let mut player = Player::new()?;
