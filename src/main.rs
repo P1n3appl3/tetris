@@ -11,7 +11,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use game::{Direction, Game, GameState, Inputs, Rotate};
+use game::{Direction, Game, GameState, Inputs, Spin};
 use graphics::RawMode;
 use input::{EventLoop, KeyEvent};
 use keys::*;
@@ -76,13 +76,13 @@ fn run_game(game: &mut Game, input: &EventLoop, keys: &Bindings, player: &Player
                         inputs.hold = true;
                         replay.push(game, Input::Hold, true);
                     } else if c == keys.cw {
-                        inputs.rotate = Some(Rotate::Right);
+                        inputs.rotate = Some(Spin::Cw);
                         replay.push(game, Input::Cw, true);
                     } else if c == keys.ccw {
-                        inputs.rotate = Some(Rotate::Left);
+                        inputs.rotate = Some(Spin::Ccw);
                         replay.push(game, Input::Ccw, true);
-                    } else if Some(c) == keys.rotate_180 {
-                        inputs.rotate = Some(Rotate::Double);
+                    } else if c == keys.flip {
+                        inputs.rotate = Some(Spin::Flip);
                     }
                 }
                 KeyEvent(c, _, false) => {
@@ -159,7 +159,7 @@ pub struct Bindings {
     pub hard: char,
     pub cw: char,
     pub ccw: char,
-    pub rotate_180: Option<char>,
+    pub flip: char,
     pub hold: char,
 }
 
@@ -172,7 +172,7 @@ impl Default for Bindings {
             hard: UP,
             cw: 'x',
             ccw: 'z',
-            rotate_180: Some('a'),
+            flip: 'a',
             hold: LEFT_SHIFT,
         }
     }
@@ -186,5 +186,5 @@ fn get_size() -> (u16, u16) {
         ws_ypixel: 0,
     };
     unsafe { libc::ioctl(1, libc::TIOCGWINSZ, &mut size) };
-    (size.ws_col as u16, size.ws_row as u16)
+    (size.ws_col, size.ws_row)
 }

@@ -24,11 +24,10 @@ pub enum Direction {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub enum Rotate {
-    Left,
-    Right,
-    /// 180º rotate
-    Double,
+pub enum Spin {
+    Cw,
+    Ccw,
+    Flip,
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -44,7 +43,7 @@ pub enum Rotation {
 #[derive(Default, Clone, Debug)]
 pub struct Inputs {
     pub dir: Option<Direction>,
-    pub rotate: Option<Rotate>,
+    pub rotate: Option<Spin>,
     pub left: bool,
     pub right: bool,
     pub soft: bool,
@@ -99,17 +98,21 @@ pub struct Game {
 }
 
 impl Rotation {
-    const fn rotate(self, dir: Direction) -> Self {
-        use {Direction::*, Rotation::*};
+    const fn rotate(self, dir: Spin) -> Self {
+        use {Rotation::*, Spin::*};
         match (self, dir) {
-            (North, Left) => West,
-            (North, Right) => East,
-            (East, Left) => North,
-            (East, Right) => South,
-            (South, Left) => East,
-            (South, Right) => West,
-            (West, Left) => South,
-            (West, Right) => North,
+            (North, Ccw) => West,
+            (North, Cw) => East,
+            (North, Flip) => South,
+            (East, Ccw) => North,
+            (East, Cw) => South,
+            (East, Flip) => West,
+            (South, Ccw) => East,
+            (South, Cw) => West,
+            (South, Flip) => North,
+            (West, Ccw) => South,
+            (West, Cw) => North,
+            (West, Flip) => East,
         }
     }
 }
@@ -119,7 +122,7 @@ impl Piece {
         DATA[self as usize][r as usize].map(|(a, b)| (x + a, y - b))
     }
 
-    fn get_your_kicks(self, rot: Rotation, dir: Direction) -> [(i8, i8); 5] {
+    fn get_your_kicks(self, rot: Rotation, dir: Spin) -> [(i8, i8); 5] {
         let next_rot = rot.rotate(dir);
         use {Piece::*, Rotation::*};
         let idx = match (rot, next_rot) {
@@ -131,7 +134,11 @@ impl Piece {
             (West, South) => 5,
             (West, North) => 6,
             (North, West) => 7,
-            _ => unreachable!("invalid rotation"),
+            (North, South) => 8,
+            (South, North) => 9,
+            (East, West) => 10,
+            (West, East) => 11,
+            (a, b) => unreachable!("invalid rotation: {a:?} {b:?}"),
         };
         match self {
             I => ROTI[idx],
@@ -410,32 +417,7 @@ impl Game {
         self.spawn(piece)
     }
 
-    fn try_rotate(&mut self, rot_ev: Rotate) -> bool {
-        use {Rotate::*, Direction as D};
-        match rot_ev {
-            Left => self.try_rotate_inner(D::Left),
-            Right => self.try_rotate_inner(D::Right),
-            Double => {
-                // this is almost certainly not correct...
-
-                // this is: bad and brittle
-                let backup = self.current;
-                if self.try_rotate_inner(D::Left) && self.try_rotate_inner(D::Left) {
-                    return true;
-                }
-
-                self.current = backup;
-                if self.try_rotate_inner(D::Right) && self.try_rotate_inner(D::Right) {
-                    return true;
-                }
-
-                self.current = backup;
-                false
-            },
-        }
-    }
-
-    fn try_rotate_inner(&mut self, dir: Direction) -> bool {
+    fn try_rotate(&mut self, dir: Spin) -> bool {
         let (piece, pos, rot) = self.current;
         let new_rot = rot.rotate(dir);
         let new_pos = piece.get_pos(new_rot, pos);
@@ -477,6 +459,7 @@ impl Default for Timers {
     }
 }
 
+// ordered n, e, s, w
 const DATA: [[Pos; 4]; 7] = [
     [
         [(0, 1), (1, 1), (2, 1), (3, 1)], // I
@@ -522,7 +505,21 @@ const DATA: [[Pos; 4]; 7] = [
     ],
 ];
 
-const ROTI: [[(i8, i8); 5]; 8] = [
+// ordered:
+// n -> e
+// e -> n
+// e -> s
+// s -> e
+// s -> e
+// s -> w
+// w -> s
+// w -> n
+// n -> w
+// n -> s
+// s -> n
+// e -> w
+// w -> e
+const ROTI: [[(i8, i8); 5]; 12] = [
     [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)],
     [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)],
     [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)],
@@ -531,9 +528,13 @@ const ROTI: [[(i8, i8); 5]; 8] = [
     [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)],
     [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)],
     [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)],
+    [(0, 0), (0, 1), (0, 0), (0, 0), (0, 0)],
+    [(0, 0), (0, -1), (0, 0), (0, 0), (0, 0)],
+    [(0, 0), (1, 0), (0, 0), (0, 0), (0, 0)],
+    [(0, 0), (-1, 0), (0, 0), (0, 0), (0, 0)],
 ];
 
-const ROTJLSTZ: [[(i8, i8); 5]; 8] = [
+const ROTJLSTZ: [[(i8, i8); 5]; 12] = [
     [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)],
     [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],
     [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],
@@ -542,4 +543,8 @@ const ROTJLSTZ: [[(i8, i8); 5]; 8] = [
     [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],
     [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],
     [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],
+    [(0, 0), (0, 1), (0, 0), (0, 0), (0, 0)],
+    [(0, 0), (0, -1), (0, 0), (0, 0), (0, 0)],
+    [(0, 0), (1, 0), (0, 0), (0, 0), (0, 0)],
+    [(0, 0), (-1, 0), (0, 0), (0, 0), (0, 0)],
 ];

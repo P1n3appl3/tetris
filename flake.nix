@@ -108,40 +108,24 @@
     };
 
     jstrisGraphPackage = let
+      # TODO: why doesn't matplotlib use the tk backend on linux by default?
+      # see: https://github.com/NixOS/nixpkgs/issues/39637
       py = np.python3.withPackages (ps: with ps;
-        [ beautifulsoup4 requests statistics matplotlib ]
+        [ beautifulsoup4 requests statistics (matplotlib.override { enableGtk3 = true; }) ]
+        # TODO: why does adding types-<foo> to my home-manager profile work with my-py,
+        # but not here? possibly nix-direnv's fault?
+        # supposedly fixed years ago by https://github.com/NixOS/nixpkgs/pull/82453
+        # which is a cute narrative PR, but doesn't work for me
+     ++ [ types-requests ] # no nix pkg for types-beautifulsoup4 or data-science-types
       );
-
-      gruvbox = np.fetchurl {
-        url = "https://raw.githubusercontent.com/thriveth/gruvbox-mpl/f7079ddfba4cae31e5f3e3c1c98d53bf866a3c5f/mpl/gruvbox.mplstyle";
-        sha256 = "sha256-R8gIaNTcNEFsh/1mkgb3j5lfkzfhGuTYuNOddhlEhls=";
-      };
     in np.stdenv.mkDerivation {
       pname = "jstrisGraph";
       version = "0.1.0";
 
       src = ./jstris.py;
-      unpackPhase = "true";
-      installPhase = ''
-        mkdir -p $out/bin
-
-        cp $src $out/jstris.py
-
-        # because `jstris.py` looks for `gruvbox` in the PWD and because it also
-        # expects the current directory to be writeable, we have to use a
-        # tempdir, a nix store dir won't work
-
-        cat > $out/bin/jstrisGraph <<'EOF'
-        #!${np.bash}/bin/bash
-        set -e
-        export PATH="${np.coreutils}/bin"
-        cd "$(mktemp -d)"
-        ln -s "${gruvbox}" gruvbox
-        exec "${py}/bin/python3" ${builtins.placeholder "out"}/jstris.py "$@"
-        EOF
-
-        chmod +x $out/bin/jstrisGraph
-      '';
+      buildInputs = [py];
+      dontUnpack = "true";
+      installPhase = "install -Dm755 $src $out/bin/jstrisGraph";
     };
 
   in let t = tetris; in {
