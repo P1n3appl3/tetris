@@ -1,6 +1,6 @@
 use crate::game::{Game, GameState, Piece, Rotation};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use termios::*;
 
 use std::{
@@ -47,21 +47,54 @@ fn set_color(o: &mut StdoutLock, (r, g, b): (u8, u8, u8)) -> Result<()> {
     }
 }
 
-fn move_cursor(o: &mut StdoutLock, (x, y): (i8, i8)) -> Result<()> {
+fn move_cursor(o: &mut StdoutLock, (x, y): (i16, i16)) -> Result<()> {
     Ok(write!(o, "{}{};{}H", csi!(), y + 1, x + 1)?)
 }
 
-pub fn draw_piece(piece: Piece, origin: (i8, i8)) -> Result<()> {
+pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
     let mut lock = io::stdout().lock();
     let o = &mut lock;
-    let pos = piece.get_pos(Rotation::North, origin);
+    let (ox, oy) = (width / 2 - 19, height / 2 - 11);
+    draw_board(o, game, (ox + 10, oy))?;
+    if let Some(hold) = game.hold {
+        draw_piece(o, hold, (ox, oy + 2))?;
+    }
+    for i in 0..5 {
+        draw_piece(
+            o,
+            *game.upcomming.get(i).ok_or(anyhow!("piece queue empty"))?,
+            (ox + 32, oy + 2 + 3 * i as i16),
+        )?;
+    }
+    let text_color = (255, 255, 255);
+    draw_text(
+        o,
+        (ox + 34, oy + 20),
+        text_color,
+        &(40 - game.lines as i32).max(0).to_string(),
+    )?;
+    let frames = game.current_frame.saturating_sub(120);
+    let mins = frames / 3600;
+    let secs = frames % 3600 / 60;
+    let millis = frames % 60 * 10 / 6;
+    let time = if mins != 0 {
+        format!("{mins}:{secs:02}.{millis:02} ")
+    } else {
+        format!("{secs}.{millis:02} ")
+    };
+    draw_text(o, (ox + 1, oy + 20), text_color, &time)?;
+    Ok(o.flush()?)
+}
+
+fn draw_piece(o: &mut StdoutLock, piece: Piece, origin: (i16, i16)) -> Result<()> {
+    let pos = piece.get_pos(Rotation::North, (origin.0 as i8, origin.1 as i8));
     let (x, y) = origin;
     for dy in 0..4 {
         move_cursor(o, (x, y + dy))?;
         for dx in 0..4 {
             set_color(
                 o,
-                if pos.contains(&(x + dx, y - dy)) {
+                if pos.contains(&(x as i8 + dx, (y - dy) as i8)) {
                     piece.color()
                 } else {
                     BG_COLOR
@@ -70,17 +103,20 @@ pub fn draw_piece(piece: Piece, origin: (i8, i8)) -> Result<()> {
             write!(o, "  ")?;
         }
     }
-    Ok(o.flush()?)
+    Ok(())
 }
 
-pub fn draw_text(origin: (i8, i8), (r, g, b): (u8, u8, u8), content: &str) -> Result<()> {
-    let mut lock = io::stdout().lock();
-    move_cursor(&mut lock, origin)?;
-    write!(lock, "\x1b[38;2;{r};{g};{b}m{content}")?;
-    Ok(lock.flush()?)
+fn draw_text(
+    o: &mut StdoutLock,
+    origin: (i16, i16),
+    (r, g, b): (u8, u8, u8),
+    content: &str,
+) -> Result<()> {
+    move_cursor(o, origin)?;
+    Ok(write!(o, "\x1b[38;2;{r};{g};{b}m{content}")?)
 }
 
-pub fn draw_board(g: &Game, origin: (i8, i8)) -> Result<()> {
+fn draw_board(o: &mut StdoutLock, g: &Game, origin: (i16, i16)) -> Result<()> {
     let (ox, oy) = origin;
     let (piece, pos, rot) = g.current;
     let current_pos = piece.get_pos(rot, pos);
@@ -93,16 +129,14 @@ pub fn draw_board(g: &Game, origin: (i8, i8)) -> Result<()> {
         ghost = next;
     }
 
-    let mut lock = io::stdout().lock();
-    let o = &mut lock;
     set_color(o, BG_COLOR)?;
     write!(o, csi!("2J"))?;
     move_cursor(o, (ox, oy))?;
-    for y in 0..20 {
-        move_cursor(o, (ox, oy + y as i8 + 1))?;
-        for x in 0..10 {
+    for y in 0..20i8 {
+        move_cursor(o, (ox, oy + y as i16 + 1))?;
+        for x in 0..10i8 {
             let y = 19 - y;
-            let mut color = g.board[y][x]
+            let mut color = g.board[y as usize][x as usize]
                 .map(|p| {
                     if g.state == GameState::Lost {
                         LOST_COLOR
@@ -111,12 +145,9 @@ pub fn draw_board(g: &Game, origin: (i8, i8)) -> Result<()> {
                     }
                 })
                 .unwrap_or((0, 0, 0));
-            if current_pos.contains(&(x as i8, y as i8)) && g.state == GameState::Running {
+            if current_pos.contains(&(x, y)) && g.state == GameState::Running {
                 color = piece.color()
-            } else if g.config.ghost
-                && ghost.contains(&(x as i8, y as i8))
-                && g.state == GameState::Running
-            {
+            } else if g.config.ghost && ghost.contains(&(x, y)) && g.state == GameState::Running {
                 let (r, g, b) = piece.color();
                 color = (r / 3, g / 3, b / 3);
             }
@@ -124,7 +155,6 @@ pub fn draw_board(g: &Game, origin: (i8, i8)) -> Result<()> {
             write!(o, "  ")?;
         }
     }
-    o.flush()?;
     Ok(())
 }
 
