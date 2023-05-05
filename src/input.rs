@@ -1,37 +1,73 @@
-use crate::keys::*;
-use anyhow::{anyhow, Result};
-
 use std::{
+    collections::HashMap,
     io::{self, Read},
     slice, str,
     sync::mpsc::{self, Receiver},
     thread,
 };
 
-#[derive(Debug, Clone, Copy)]
-pub struct KeyEvent(pub char, pub u8, pub bool);
+use anyhow::{anyhow, Result};
 
-impl EventLoop {
-    pub fn start() -> Self {
-        let (tx, rx) = mpsc::sync_channel(32);
+use crate::game::InputEvent;
+use crate::keys::*;
 
-        thread::spawn(move || {
-            let mut stdin = io::stdin().lock();
-            let mut buf = [0; 64];
-            loop {
-                let n = stdin.read(&mut buf).unwrap();
-                if let Ok(k) = parse_kitty_key(unsafe { slice::from_raw_parts(buf.as_ptr(), n) }) {
-                    tx.send(k).unwrap();
-                }
-            }
-        });
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct KeyEvent {
+    pub key: char,
+    pub mods: u8,
+    pub press: bool,
+}
 
-        Self { events: rx }
+impl From<(char, u8, bool)> for KeyEvent {
+    fn from((key, mods, press): (char, u8, bool)) -> Self {
+        KeyEvent { key, mods, press }
     }
 }
 
 pub struct EventLoop {
-    pub events: Receiver<KeyEvent>,
+    pub events: Receiver<InputEvent>,
+}
+
+impl EventLoop {
+    pub fn start(bindings: crate::Bindings) -> Self {
+        let (tx, rx) = mpsc::channel();
+
+        thread::spawn(move || {
+            let mut stdin = io::stdin().lock();
+            use InputEvent::*;
+            let keymap = [
+                ((bindings.left, 0, true), PressLeft),
+                ((bindings.left, 0, false), ReleaseLeft),
+                ((bindings.right, 0, true), PressRight),
+                ((bindings.right, 0, false), ReleaseRight),
+                ((bindings.soft, 0, true), PressSoft),
+                ((bindings.soft, 0, false), ReleaseSoft),
+                ((bindings.hard, 0, true), Hard),
+                ((bindings.cw, 0, true), Cw),
+                ((bindings.ccw, 0, true), Ccw),
+                ((bindings.flip, 0, true), Flip),
+                ((bindings.hold, 0, true), Hold),
+                (('r', 0, true), Restart),
+                (('q', 0, true), Quit),
+                (('c', crate::keys::CTRL, true), Quit),
+            ]
+            .into_iter()
+            .map(|(k, i)| (k.into(), i))
+            .collect::<HashMap<KeyEvent, InputEvent>>();
+            let mut buf = [0; 64];
+            loop {
+                let n = stdin.read(&mut buf).unwrap();
+                if let Ok(k) =
+                    crate::input::parse_kitty_key(unsafe { slice::from_raw_parts(buf.as_ptr(), n) })
+                {
+                    if let Some(&ev) = keymap.get(&k) {
+                        tx.send(ev).unwrap();
+                    }
+                }
+            }
+        });
+        Self { events: rx }
+    }
 }
 
 fn parse_kitty_key(buf: &[u8]) -> Result<KeyEvent> {
@@ -52,7 +88,7 @@ fn parse_kitty_key(buf: &[u8]) -> Result<KeyEvent> {
     } else {
         trailer_map(trailer)
     };
-    let (mods, release) = if let Some(v) = parts.get(1) {
+    let (mods, press) = if let Some(v) = parts.get(1) {
         match v[..] {
             [a] | [a, 1] => (a - 1, true),
             [a, 3] => (a - 1, false),
@@ -62,5 +98,9 @@ fn parse_kitty_key(buf: &[u8]) -> Result<KeyEvent> {
     } else {
         (0, true)
     };
-    Ok(KeyEvent(code, mods as u8, release))
+    Ok(KeyEvent {
+        key: code,
+        mods: mods as u8,
+        press,
+    })
 }

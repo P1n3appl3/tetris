@@ -1,7 +1,10 @@
 use rand::prelude::*;
 
 use crate::sound::Player;
-use std::collections::VecDeque;
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 
 pub type Pos = [(i8, i8); 4];
 
@@ -30,6 +33,18 @@ pub enum Spin {
     Flip,
 }
 
+impl TryFrom<InputEvent> for Spin {
+    type Error = ();
+    fn try_from(input: InputEvent) -> Result<Self, Self::Error> {
+        match input {
+            InputEvent::Cw => Ok(Self::Cw),
+            InputEvent::Ccw => Ok(Self::Ccw),
+            InputEvent::Flip => Ok(Self::Flip),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, Default)]
 #[repr(u8)]
 pub enum Rotation {
@@ -40,16 +55,44 @@ pub enum Rotation {
     West,
 }
 
-#[derive(Default, Clone, Debug)]
-pub struct Inputs {
-    pub dir: Option<Direction>,
-    pub rotate: Option<Spin>,
-    pub left: bool,
-    pub right: bool,
-    pub soft: bool,
-    pub hard: bool,
-    pub hold: bool,
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum InputEvent {
+    PressLeft,
+    ReleaseLeft,
+    PressRight,
+    ReleaseRight,
+    PressSoft,
+    ReleaseSoft,
+    Cw,
+    Ccw,
+    Flip,
+    Hard,
+    Hold,
+    Restart,
+    Quit,
 }
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum TimerEvent {
+    DasLeft,
+    DasRight,
+    Arr,
+    SoftDrop,
+    Gravity,
+    Lock,
+    Extended,
+    Timeout,
+    StartSound,
+    Start,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Event {
+    Timer(TimerEvent),
+    Input(InputEvent),
+}
+
+const FRAME: Duration = Duration::from_secs_f64(1. / 60.);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Config {
@@ -66,6 +109,13 @@ pub struct Timers {
     pub das_left: u8,
     pub das_right: u8,
     pub arr: i8,
+    // TODO: make soft droppping behave like jstris:
+    // i found experimentally that upon pressing the softdrop key, the soft drop timer AND the
+    // gravity timer are restarted. this means that by repeatedly tapping the softdrop key without
+    // holding it down for a full softdrop delay and without releasing it for a full gravity delay
+    // you can actually cause a piece to remain still, until the timeout eventually forces it to
+    // hard drop. luckily this is pretty easy to implement, we just have to reset the timers every
+    // time you press/release softdrop.
     pub soft: i8,
     pub gravity: u16,
     pub lock: u8,
@@ -89,10 +139,11 @@ pub struct Game {
     pub hold: Option<Piece>,
     pub lines: u16,
     pub config: Config,
-    pub timers: Timers,
-    pub last_dir: Direction,
+    pub timers: VecDeque<(Instant, TimerEvent)>,
+    pub started_right: Option<Instant>,
+    pub started_left: Option<Instant>,
+    pub last_update: Instant,
     pub can_hold: bool,
-    pub current_frame: u16,
     pub state: GameState,
     pub rng: StdRng,
 }
@@ -138,7 +189,7 @@ impl Piece {
             (South, North) => 9,
             (East, West) => 10,
             (West, East) => 11,
-            (a, b) => unreachable!("invalid rotation: {a:?} {b:?}"),
+            (a, b) => unreachable!("invalid rotation: {a:?} -> {b:?}"),
         };
         match self {
             I => ROTI[idx],
@@ -159,24 +210,135 @@ impl Game {
             hold: None,
             lines: 0,
             timers: Default::default(),
-            last_dir: Direction::Left,
+            started_left: None,
+            started_right: None,
+            last_update: Instant::now(),
             can_hold: true,
-            current_frame: Default::default(),
             state: GameState::Done,
         }
     }
 
-    pub fn start(&mut self, seed: u64) {
+    pub fn start(&mut self, seed: u64, player: &Player) {
         self.state = GameState::Startup;
         self.board = Default::default();
         self.hold = None;
-        self.current_frame = 0;
+        self.last_update = Instant::now();
         self.lines = 0;
         self.upcomming.clear();
         self.rng = StdRng::seed_from_u64(seed);
         self.fill_bag();
         while let Some(Piece::Z | Piece::S) = self.upcomming.front() {
             self.pop_piece();
+        }
+        player.play("ready");
+        self.set_timer(TimerEvent::StartSound, self.last_update, 60);
+    }
+
+    pub fn handle(&mut self, event: Event, time: Instant, player: &Player) {
+        use {Event::*, InputEvent::*, TimerEvent::*};
+        match event {
+            Input(Hard) | Timer(Lock | Extended | Timeout) => self.hard_drop(player),
+            Input(PressLeft) => {
+                if self.try_move((-1, 0)) {
+                    player.play("move").ok();
+                    self.clear_timer(Lock);
+                }
+                self.started_left = Some(time);
+                self.clear_timer(DasRight);
+                self.set_timer(DasLeft, time, self.config.das as u32);
+            }
+            Input(ReleaseLeft) => self.clear_timer(DasLeft),
+            Input(PressRight) => {
+                if self.try_move((1, 0)) {
+                    player.play("move").ok();
+                    self.clear_timer(Lock);
+                }
+                self.started_right = Some(time);
+                self.clear_timer(DasLeft);
+                self.set_timer(DasRight, time, self.config.das as u32);
+            }
+            Input(ReleaseRight) => self.clear_timer(DasRight),
+            Input(Hold) => {
+                if self.can_hold {
+                    if !self.hold() {
+                        player.play("lose").ok();
+                        self.state = GameState::Lost;
+                    } else {
+                        player.play("hold").ok();
+                        self.can_hold = false;
+                    }
+                }
+            }
+            Input(rot @ (Cw | Ccw | Flip)) => {
+                if self.try_rotate(rot.try_into().expect("should always be a rotation")) {
+                    self.clear_timer(Lock);
+                    player.play("rotate").ok();
+                }
+                self.clear_timer(Extended);
+            }
+            Input(PressSoft) => {
+                self.clear_timer(Gravity);
+                self.set_timer(SoftDrop, time, self.config.soft_drop as u32);
+            }
+            Input(ReleaseSoft) => {
+                self.clear_timer(SoftDrop);
+                self.set_timer(Gravity, time, self.config.gravity as u32);
+            }
+            Input(Restart | Quit) => unreachable!("should be handled in outer event loop"),
+            Timer(DasLeft) => {
+                // TODO: add das sound effect
+                todo!()
+            }
+            Timer(DasRight) => {
+                // TODO: add das sound effect
+                todo!()
+            }
+            Timer(t @ (SoftDrop | Gravity)) => {
+                todo!()
+            }
+            Timer(Arr) => {
+                todo!()
+            }
+            Timer(StartSound) => {
+                player.play("go").ok();
+                self.set_timer(Start, time, 60);
+            }
+            Timer(Start) => {
+                self.state = GameState::Running;
+                let next = self.pop_piece();
+                self.spawn(next);
+            }
+        };
+        // set lock timers if on the ground and they arent already set
+    }
+
+    fn set_timer(&mut self, t: TimerEvent, time: Instant, frames: u32) {
+        let time = time + FRAME * frames;
+        let idx = self.timers.partition_point(|&(i, ev)| i < time);
+        self.timers.insert(idx, (time, t))
+    }
+
+    fn clear_timer(&mut self, t: TimerEvent) {
+        self.timers.retain(|&(i, ev)| ev != t)
+    }
+
+    fn hard_drop(&mut self, player: &Player) {
+        while self.try_move((0, -1)) {}
+        let old_lines = self.lines;
+        if self.lock() {
+            match self.lines {
+                n if n == old_lines => player.play("lock").ok(),
+                40.. => {
+                    player.play("win").or_else(|_| player.play("lock")).ok();
+                    self.state = GameState::Done;
+                    return;
+                }
+                _ => player.play("line").ok(),
+            };
+        } else {
+            player.play("lose").ok();
+            self.state = GameState::Lost;
+            return;
         }
     }
 
@@ -216,49 +378,6 @@ impl Game {
         } else {
             self.timers.lock = 0;
             self.timers.extended = 0;
-        }
-        if inputs.hard
-            || self.timers.lock == self.config.lock_delay.0
-            || self.timers.extended == self.config.lock_delay.1
-            || self.timers.timeout == self.config.lock_delay.2
-        {
-            while self.try_move((0, -1)) {}
-            let old_lines = self.lines;
-            if self.lock() {
-                match self.lines {
-                    n if n == old_lines => player.play("lock").ok(),
-                    40.. => {
-                        player.play("win").or_else(|_| player.play("lock")).ok();
-                        self.state = GameState::Done;
-                        return;
-                    }
-                    _ => player.play("line").ok(),
-                };
-            } else {
-                player.play("lose").ok();
-                self.state = GameState::Lost;
-                return;
-            }
-        }
-
-        //hold
-        if inputs.hold && self.can_hold {
-            if !self.hold() {
-                player.play("lose").ok();
-                self.state = GameState::Lost;
-                return;
-            }
-            player.play("hold").ok();
-            self.can_hold = false;
-        }
-
-        // rotation
-        if let Some(rot_ev) = inputs.rotate {
-            if self.try_rotate(rot_ev) {
-                self.timers.lock = 0;
-                self.timers.extended = 0;
-                player.play("rotate").ok();
-            }
         }
 
         // left/right movement
