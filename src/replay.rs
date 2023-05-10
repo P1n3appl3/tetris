@@ -7,7 +7,7 @@ use std::{
     mem::transmute,
 };
 
-use crate::game::{Config, Game, GameState};
+use crate::game::{Config, Event, Game, GameState};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
@@ -23,21 +23,20 @@ pub enum Input {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Event {
-    elapsed: u16,
-    press: bool,
-    input: Input,
+pub struct ReplayEvent {
+    elapsed: Duration,
+    inner: Event,
 }
 
-// TODO: write a PRNG compatible with the one jstris uses so that seeds can be shared
-// harddrop.com/forums/index.php%3Fs=&showtopic=7087&view=findpost&p=92057
-// also rework soft-drop config to match jstris's
+// TODO: write a PRNG compatible with the one jstris uses so that seeds can be
+// shared harddrop.com/forums/index.php%3Fs=&showtopic=7087&view=findpost&
+// p=92057 also rework soft-drop config to match jstris's
 #[derive(Debug, PartialEq, Eq)]
 pub struct Replay {
     pub length: u32,
     pub seed: u64,
     pub config: Config,
-    pub events: Vec<Event>,
+    pub events: Vec<ReplayEvent>,
     pub current_ms: u32,
 }
 
@@ -59,6 +58,8 @@ impl Replay {
         })
     }
 
+    // TODO: rewrite replay serialization
+    /*
     pub fn save<W: Write>(&self, w: W) -> Result<()> {
         let mut w = BufWriter::new(w);
         w.write_u32::<LE>(self.length)?;
@@ -133,4 +134,5 @@ impl Replay {
 
         Ok(Self { length, seed, config, events, current_ms: 0 })
     }
+*/
 }

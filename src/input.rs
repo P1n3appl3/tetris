@@ -1,14 +1,14 @@
 use std::{
     collections::HashMap,
     io::{self, Read},
-    slice, str,
+    str,
     sync::mpsc::{self, Receiver},
     thread,
 };
 
 use anyhow::{anyhow, Result};
 
-use crate::game::InputEvent;
+use crate::game::{Direction, InputEvent, Spin};
 use crate::keys::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -34,18 +34,18 @@ impl EventLoop {
 
         thread::spawn(move || {
             let mut stdin = io::stdin().lock();
-            use InputEvent::*;
+            use {Direction::*, InputEvent::*};
             let keymap = [
-                ((bindings.left, 0, true), PressLeft),
-                ((bindings.left, 0, false), ReleaseLeft),
-                ((bindings.right, 0, true), PressRight),
-                ((bindings.right, 0, false), ReleaseRight),
+                ((bindings.left, 0, true), PressDir(Left)),
+                ((bindings.left, 0, false), ReleaseDir(Left)),
+                ((bindings.right, 0, true), PressDir(Right)),
+                ((bindings.right, 0, false), ReleaseDir(Right)),
                 ((bindings.soft, 0, true), PressSoft),
                 ((bindings.soft, 0, false), ReleaseSoft),
                 ((bindings.hard, 0, true), Hard),
-                ((bindings.cw, 0, true), Cw),
-                ((bindings.ccw, 0, true), Ccw),
-                ((bindings.flip, 0, true), Flip),
+                ((bindings.cw, 0, true), Rotate(Spin::Cw)),
+                ((bindings.ccw, 0, true), Rotate(Spin::Ccw)),
+                ((bindings.flip, 0, true), Rotate(Spin::Flip)),
                 ((bindings.hold, 0, true), Hold),
                 (('r', 0, true), Restart),
                 (('q', 0, true), Quit),
@@ -57,9 +57,7 @@ impl EventLoop {
             let mut buf = [0; 64];
             loop {
                 let n = stdin.read(&mut buf).unwrap();
-                if let Ok(k) = crate::input::parse_kitty_key(unsafe {
-                    slice::from_raw_parts(buf.as_ptr(), n)
-                }) {
+                if let Ok(k) = crate::input::parse_kitty_key(&buf[..n]) {
                     if let Some(&ev) = keymap.get(&k) {
                         tx.send(ev).unwrap();
                     }

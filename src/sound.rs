@@ -34,6 +34,8 @@ impl Player {
 
     pub fn play(&self, s: &str) -> Result<()> {
         if let Some(sound) = self.sounds.get(s) {
+            // TODO: cloning the sound on every seems bad. even if volume is dynamic it
+            // should probably cache the amplified sounds
             Ok(self.handle.play_raw(sound.clone().amplify(self.volume))?)
         } else {
             Err(anyhow!("couldn't find sound"))

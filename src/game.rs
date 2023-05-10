@@ -20,32 +20,30 @@ pub enum Piece {
     Z,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(i8)]
 pub enum Direction {
-    Left,
-    Right,
+    Left = -1,
+    Right = 1,
 }
 
-#[derive(Copy, Clone, Debug)]
+impl Direction {
+    fn reverse(self) -> Self {
+        match self {
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Spin {
     Cw,
     Ccw,
     Flip,
 }
 
-impl TryFrom<InputEvent> for Spin {
-    type Error = ();
-    fn try_from(input: InputEvent) -> Result<Self, Self::Error> {
-        match input {
-            InputEvent::Cw => Ok(Self::Cw),
-            InputEvent::Ccw => Ok(Self::Ccw),
-            InputEvent::Flip => Ok(Self::Flip),
-            _ => Err(()),
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Rotation {
     #[default]
@@ -57,15 +55,11 @@ pub enum Rotation {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum InputEvent {
-    PressLeft,
-    ReleaseLeft,
-    PressRight,
-    ReleaseRight,
+    PressDir(Direction),
+    ReleaseDir(Direction),
     PressSoft,
     ReleaseSoft,
-    Cw,
-    Ccw,
-    Flip,
+    Rotate(Spin),
     Hard,
     Hold,
     // maybe pull these out along with Garbage/Pause/StartSound to a "misc" event
@@ -75,8 +69,7 @@ pub enum InputEvent {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TimerEvent {
-    DasLeft,
-    DasRight,
+    Das(Direction),
     Arr,
     SoftDrop,
     Gravity,
@@ -94,22 +87,23 @@ pub enum Event {
 
 const FRAME: Duration = Duration::from_nanos(16_666_667);
 
+// TODO: make all these floats (maybe ms instead of frames?)
+// TODO: find jstris softdrop delays and match them
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Config {
-    pub das: u8,
-    pub arr: u8,
+    pub das: u16,
+    pub arr: u16,
     pub gravity: u16,
-    pub soft_drop: u8,
-    pub lock_delay: (u8, u16, u16),
+    pub soft_drop: u16,
+    pub lock_delay: (u16, u16, u16),
     pub ghost: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GameState {
     Startup,
-    Done,
-    Lost,
     Running,
+    Done,
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
@@ -122,7 +116,7 @@ pub enum Cell {
 
 #[derive(Clone)]
 pub struct Game {
-    pub board: [[Cell; 10]; 23],
+    pub board: [[Cell; 10]; 30], // hope no one stacks higher than this 👀
     pub upcomming: VecDeque<Piece>,
     pub current: (Piece, (i8, i8), Rotation),
     pub hold: Option<Piece>,
@@ -131,6 +125,9 @@ pub struct Game {
     pub timers: VecDeque<(Instant, TimerEvent)>,
     pub started_right: Option<Instant>,
     pub started_left: Option<Instant>,
+    pub start_time: Instant,
+    pub current_time: Instant,
+    pub soft_dropping: bool,
     pub can_hold: bool,
     pub state: GameState,
     pub start_time: Option<Instant>,
@@ -192,6 +189,7 @@ impl Piece {
 
 impl Game {
     pub fn new(config: Config) -> Self {
+        let t = Instant::now();
         Self {
             config,
             rng: StdRng::from_entropy(),
@@ -206,6 +204,9 @@ impl Game {
             start_time: None,
             end_time: None,
             last_update: None,
+            start_time: t,
+            current_time: t,
+            soft_dropping: false,
             can_hold: true,
             state: GameState::Done,
         }
@@ -224,17 +225,22 @@ impl Game {
             self.pop_piece();
         }
         player.play("ready").ok();
-        // TODO: start sound event?
-        // self.set_timer(TimerEvent::StartSound, self.last_update, 60);
+        // TODO: combine "ready" and "go" sounds
+        // TODO: make startup time configurable
         self.set_timer(TimerEvent::Start, Instant::now(), 120);
     }
 
-    pub fn handle(&mut self, event: Event, time: Instant, player: &Player) {
-        use {Event::*, InputEvent::*, TimerEvent::*};
+    pub fn handle_event(&mut self, event: Event, time: Instant, player: &Player) {
+        self.current_time = time;
+        use {Event::*, GameState::*, InputEvent::*, TimerEvent::*};
         match event {
-            Input(Hard) | Timer(Lock | Extended | Timeout) => self.hard_drop(player),
-            Input(PressLeft) => {
-                if self.try_move((-1, 0)) {
+            Input(PressDir(dir)) => {
+                self.last_dir = dir;
+                self.set_timer(Das(dir));
+                if self.dasing {
+                    self.das_charged = true;
+                }
+                if self.state == Running && self.try_shift(dir) {
                     player.play("move").ok();
                     self.clear_timer(Lock);
                 }
@@ -262,53 +268,34 @@ impl Game {
                 if self.can_hold {
                     if !self.hold() {
                         player.play("lose").ok();
-                        self.state = GameState::Lost;
+                        self.state = GameState::Done;
+                        self.timers.clear();
                     } else {
                         player.play("hold").ok();
                         self.can_hold = false;
                     }
+                } else {
+                    // TODO: add failed hold sound
+                    // player.play("nohold");
                 }
             }
-            Input(rot @ (Cw | Ccw | Flip)) => {
-                if self.try_rotate(rot.try_into().expect("should always be a rotation")) {
-                    self.clear_timer(Lock);
-                    player.play("rotate").ok();
-                }
-                self.clear_timer(Extended);
-            }
-            Input(PressSoft) => {
-                self.clear_timer(Gravity);
-                self.set_timer(SoftDrop, time, self.config.soft_drop as u32);
-            }
-            Input(ReleaseSoft) => {
-                self.clear_timer(SoftDrop);
-                self.set_timer(Gravity, time, self.config.gravity as u32);
-            }
-            Input(Restart | Quit) => unreachable!("should be handled in outer event loop"),
-            Timer(DasLeft) => {
-                // TODO: add das sound effect
-                todo!()
-            }
-            Timer(DasRight) => {
-                // TODO: add das sound effect
-                todo!()
-            }
+            Input(Hard) | Timer(Lock | Extended | Timeout) => self.hard_drop(player),
             Timer(t @ (SoftDrop | Gravity)) => {
-                todo!()
+                self.try_drop();
+                self.set_timer(t);
             }
-            Timer(Arr) => {
-                todo!()
+            Timer(StartSound) => {
+                player.play("go").ok();
+                self.set_timer(Start, time, 60);
             }
-            // Timer(StartSound) => {
-            //     player.play("go").ok();
-            //     self.set_timer(Start, time, 60);
-            // }
             Timer(Start) => {
+                self.start_time = self.current_time;
                 self.state = GameState::Running;
                 let next = self.pop_piece();
                 self.spawn(next);
                 self.start_time = Some(time);
             }
+            Input(Restart | Quit) => unreachable!("should be handled in outer event loop"),
         };
         self.last_update = Some(time);
         // TODO: set lock timers if on the ground and they arent already set
@@ -325,17 +312,19 @@ impl Game {
     }
 
     fn hard_drop(&mut self, player: &Player) {
-        while self.try_move((0, -1)) {}
+        while self.try_drop() {}
         let old_lines = self.lines;
         if self.lock() {
             match self.lines {
-                n if n == old_lines => player.play("lock").ok(),
+                n if n == old_lines => {
+                    player.play("lock").ok();
+                }
                 40.. => {
+                    // TODO: maybe just play both at the same time?
                     player.play("win").or_else(|_| player.play("lock")).ok();
                     self.state = GameState::Done;
                     Some(())
                 }
-                _ => player.play("line").ok(),
             };
         } else {
             player.play("lose").ok();
@@ -400,7 +389,16 @@ impl Game {
             return false;
         }
         self.current = (next, (3, 21), Rotation::North);
-        self.try_move((0, -1));
+        self.try_drop();
+        self.set_timer(if self.soft_dropping {
+            SoftDrop
+        } else {
+            Gravity
+        });
+        self.set_timer(Timeout);
+        if self.dasing && self.config.arr == 0 {
+            while self.try_shift(self.last_dir) {}
+        }
         true
     }
 
@@ -424,17 +422,57 @@ impl Game {
             if self.check_valid(displaced) {
                 self.current.1 = (pos.0 + dx, pos.1 + dy);
                 self.current.2 = new_rot;
+                if self.dasing && self.config.arr == 0 {
+                    while self.try_shift(self.last_dir) {}
+                }
                 return true;
             }
         }
         false
     }
 
+    fn try_shift(&mut self, dir: Direction) -> bool {
+        use {Direction::*, TimerEvent::*};
+        let dx = match dir {
+            Left => -1,
+            Right => 1,
+        };
+        self.try_move((dx, 0))
+            .then(|| {
+                if self.can_drop() {
+                    self.clear_timer(Lock);
+                } else if !self.timers.iter().any(|(_, ev)| *ev == Lock) {
+                    self.set_timer(Lock);
+                }
+            })
+            .is_some()
+    }
+
+    fn try_drop(&mut self) -> bool {
+        use TimerEvent::*;
+        self.try_move((0, -1))
+            .then(|| {
+                if self.can_drop() {
+                    self.clear_timer(Lock);
+                    self.clear_timer(Extended);
+                } else {
+                    self.set_timer(Lock);
+                    self.set_timer(Extended);
+                }
+            })
+            .is_some()
+    }
+
+    fn can_drop(&self) -> bool {
+        let (piece, pos, rot) = self.current;
+        self.check_valid(piece.get_pos(rot, pos).map(|(x, y)| (x, y - 1)))
+    }
+
     fn try_move(&mut self, (dx, dy): (i8, i8)) -> bool {
-        let (p, (x, y), rot) = self.current;
+        let (piece, (x, y), rot) = self.current;
         let pos = (x + dx, y + dy);
-        if self.check_valid(p.get_pos(rot, pos)) {
-            self.current = (p, pos, rot);
+        if self.check_valid(piece.get_pos(rot, pos)) {
+            self.current = (piece, pos, rot);
             true
         } else {
             false

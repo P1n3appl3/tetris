@@ -20,7 +20,7 @@ macro_rules! csi {
 }
 
 const BG_COLOR: (u8, u8, u8) = (20, 20, 20);
-const LOST_COLOR: (u8, u8, u8) = (106, 106, 106);
+const DONE_COLOR: (u8, u8, u8) = (106, 106, 106);
 
 impl Piece {
     pub const fn color(self) -> (u8, u8, u8) {

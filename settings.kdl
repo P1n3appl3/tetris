@@ -28,7 +28,7 @@ config {
     das 6
     arr 0
     gravity 60
-    soft_drop 2
+    soft_drop 1
     ghost true
     // these mirror the 3 jstris lock delays
     lock 30
@@ -36,8 +36,12 @@ config {
     timeout 1200
 }
 
-// these settings are closer to a standard tetris game like puyo-puyo tetris
+// these settings are closer to a standard guideline tetris game:
 // config {das 10; arr 2; gravity 60; soft_drop 4; ghost true; lock_delay 30 300 1200;}
+
+// TODO: implement line clear delay and ARE
+// TODO: add tetris 99 config (12f das, 2f arr, 6f are)
+// TODO: add puyo-puyo tetris config (9f das, 2f arr, variable are/line delay)
 
 sound {
     volume 0.3
