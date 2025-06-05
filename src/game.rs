@@ -1,14 +1,16 @@
-use rand::prelude::*;
-
-use crate::sound::Player;
 use std::{
     collections::VecDeque,
     time::{Duration, Instant},
 };
 
+use rand::prelude::*;
+use serde::{Deserialize, Serialize};
+
+use crate::sound::Player;
+
 pub type Pos = [(i8, i8); 4];
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Piece {
     I,
@@ -20,7 +22,7 @@ pub enum Piece {
     Z,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(i8)]
 pub enum Direction {
     Left = -1,
@@ -36,14 +38,14 @@ impl Direction {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Spin {
     Cw,
     Ccw,
     Flip,
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Rotation {
     #[default]
@@ -53,7 +55,7 @@ pub enum Rotation {
     West,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InputEvent {
     PressDir(Direction),
     ReleaseDir(Direction),
@@ -89,7 +91,7 @@ const FRAME: Duration = Duration::from_nanos(16_666_667);
 
 // TODO: make all these floats (maybe ms instead of frames?)
 // TODO: find jstris softdrop delays and match them
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     pub das: u16,
     pub arr: u16,
@@ -390,11 +392,7 @@ impl Game {
         }
         self.current = (next, (3, 21), Rotation::North);
         self.try_drop();
-        self.set_timer(if self.soft_dropping {
-            SoftDrop
-        } else {
-            Gravity
-        });
+        self.set_timer(if self.soft_dropping { SoftDrop } else { Gravity });
         self.set_timer(Timeout);
         if self.dasing && self.config.arr == 0 {
             while self.try_shift(self.last_dir) {}

@@ -2,7 +2,7 @@ mod game;
 mod graphics;
 mod input;
 mod keys;
-// mod replay;
+mod replay;
 mod settings;
 mod sound;
 

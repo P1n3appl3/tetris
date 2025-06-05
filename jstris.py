@@ -93,7 +93,7 @@ def graph_times(games):
         if time < mins[-1][-1]:
             mins.append((i, time))
 
-    if Path("gruvbox").exists:
+    if Path("gruvbox").exists():
         plt.style.use('gruvbox')
     plt.scatter(*(zip(*points)), s=1, label="times")
     plt.plot(*(zip(*avgs)), label="rolling average")
