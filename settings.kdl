@@ -1,20 +1,31 @@
 // reserved keys:
 // "q" / ctrl+c: quit
 // "r": restart
+// bindings {
+//     left "left"
+//     right "right"
+//     cw "x"
+//     ccw "z"
+//     flip "a"
+//     hard "up"
+//     soft "down"
+//     hold "shift"
+// }
+
 bindings {
-    left "left"
-    right "right"
-    cw "x"
-    ccw "z"
-    flip "a"
-    hard "up"
-    soft "down"
-    hold "shift"
+    left "j"
+    right "l"
+    soft "k"
+    hard "space"
+    cw "f"
+    ccw "d"
+    flip "s"
+    hold "a"
 }
 
 // all values are specified in frames
 config {
-    das 8
+    das 6
     arr 0
     gravity 60
     soft_drop 2

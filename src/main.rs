@@ -1,4 +1,3 @@
-#![feature(deadline_api)]
 mod game;
 mod graphics;
 mod input;
@@ -7,19 +6,29 @@ mod replay;
 mod settings;
 mod sound;
 
-use std::{sync::mpsc, time::Instant};
+use std::{
+    fs::File,
+    path::Path,
+    sync::mpsc,
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+};
 
 use game::{Event, Game, GameState, InputEvent};
 use graphics::RawMode;
 use input::EventLoop;
 use keys::*;
+use log::{error, info};
 use rand::prelude::*;
-// use replay::{Input, Replay};
+use replay::Replay;
 use sound::Player;
 
 fn main() {
-    // on first run create config file and pring help, maybe open config in editor?
-    // error on failed kitty input mode, foot/wezterm/kitty only
+    // TODO: on first run create config file and print help, maybe open config in editor?
+    // TODO: error on failed kitty input mode detection, print list of links (wez/kitty/alacritty/ghost/foot/iterm2/rio)
+    ftail::Ftail::new()
+        .single_file(Path::new("log.txt"), true, log::LevelFilter::Debug)
+        .init()
+        .ok();
     let _mode = RawMode::enter();
     let (config, keys, player) = settings::load().unwrap();
     let input = EventLoop::start(keys);
@@ -35,40 +44,54 @@ fn run_game(game: &mut Game, input: &EventLoop, player: &Player) -> bool {
 
     let seed = thread_rng().gen();
     game.start(seed, player);
-    // let mut replay = Replay::new(game.config, seed);
+    let replay = Replay::new(game.config, seed);
+
+    graphics::draw(width as i16, height as i16, game).unwrap();
 
     let done = loop {
         use mpsc::RecvTimeoutError::*;
-        let &(deadline, timer_event) = game.timers.front().expect("no timers");
-        match input.events.recv_deadline(deadline) {
+        let now = Instant::now();
+        let deadline = game
+            .timers
+            .front()
+            .map(|&(t, _)| t)
+            .unwrap_or(now + Duration::from_millis(100));
+        match input.events.recv_timeout(deadline - now) {
             Ok(InputEvent::Restart) => break true,
             Ok(InputEvent::Quit) => break false,
-            // TODO: busy wait with try_recv until the iteration where the current instant is
-            // actually past the deadline (or within some bound of it) to increase accuracy of
-            // timer events
-            Ok(input_event) => game.handle(Event::Input(input_event), Instant::now(), player),
-            Err(Timeout) => game.handle(Event::Timer(timer_event), Instant::now(), player),
-            Err(Disconnected) => panic!("input thread died unexpectedly"),
+            Ok(input_event) => {
+                game.handle(Event::Input(input_event), Instant::now(), player)
+            }
+            Err(Timeout) => {
+                if let Some((t, timer_event)) = game.timers.pop_front() {
+                    info!("{:?}, {timer_event:?}", deadline - Instant::now());
+                    game.handle(Event::Timer(timer_event), Instant::now(), player);
+                    debug_assert!(t < Instant::now());
+                }
+            }
+            Err(Disconnected) => {
+                error!("input thread died unexpectedly");
+                break false;
+            }
         }
 
+        // TODO: draw every tenth of a second in a separate loop, checking a "paused" atomic bool
+        // that's set by this thread based on gamestate
         graphics::draw(width as i16, height as i16, game).unwrap();
     };
 
     if game.state == GameState::Done {
-        // let time = SystemTime::now()
-        //     .duration_since(UNIX_EPOCH)
-        //     .expect("time went backwards")
-        //     .as_secs();
-        // replay.total_frames = game.current_frame - 120;
-        // {
-        //     let replayfile =
-        // File::create(format!("replays/{time}.bin")).unwrap();
-        //     replay.save(replayfile).unwrap();
-        // }
-        // // does it round-trip?
-        // replay.current_frame = 0;
-        // let replayfile = File::open(format!("replays/{time}.bin")).unwrap();
-        // assert_eq!(replay, Replay::load(replayfile).unwrap());
+        let time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time went backwards")
+            .as_secs();
+        {
+            let replayfile = File::create(format!("replays/{time}.bin")).unwrap();
+            replay.save(replayfile).unwrap();
+        }
+        // does it round-trip?
+        let replayfile = File::open(format!("replays/{time}.bin")).unwrap();
+        debug_assert_eq!(replay, Replay::load(replayfile).unwrap());
     }
     done
 }
@@ -101,12 +124,7 @@ impl Default for Bindings {
 }
 
 fn get_size() -> (u16, u16) {
-    let mut size = libc::winsize {
-        ws_row: 0,
-        ws_col: 0,
-        ws_xpixel: 0,
-        ws_ypixel: 0,
-    };
+    let mut size = libc::winsize { ws_row: 0, ws_col: 0, ws_xpixel: 0, ws_ypixel: 0 };
     unsafe { libc::ioctl(1, libc::TIOCGWINSZ, &mut size) };
     (size.ws_col, size.ws_row)
 }

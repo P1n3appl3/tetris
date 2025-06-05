@@ -1,34 +1,48 @@
-use crate::game::{Game, GameState, Piece, Rotation};
+use crate::game::{Cell, Game, GameState, Piece, Rotation};
 
 use anyhow::{anyhow, Result};
 use termios::*;
 
 use std::{
-    io::{self, StdoutLock, Write},
+    io::{self, BufRead, StdoutLock, Write},
     os::unix::prelude::AsRawFd,
-    sync::atomic::{AtomicU8, Ordering::Relaxed},
+    process::exit,
+    sync::{
+        atomic::{AtomicU8, Ordering::Relaxed},
+        mpsc::RecvTimeoutError,
+    },
+    thread,
+    time::{Duration, Instant},
 };
 
 macro_rules! csi {
     ($( $x:expr ),*) => { concat!("\x1b[", $( $x ),*) };
 }
 
-const COLORS: [(u8, u8, u8); 7] = [
-    (15, 155, 215),
-    (33, 65, 198),
-    (227, 91, 2),
-    (227, 159, 2),
-    (89, 177, 1),
-    (175, 41, 138),
-    (215, 15, 55),
-];
-
 const BG_COLOR: (u8, u8, u8) = (20, 20, 20);
 const LOST_COLOR: (u8, u8, u8) = (106, 106, 106);
 
 impl Piece {
-    pub fn color(self) -> (u8, u8, u8) {
-        COLORS[self as usize]
+    pub const fn color(self) -> (u8, u8, u8) {
+        match self {
+            Piece::I => (15, 155, 215),
+            Piece::J => (33, 65, 198),
+            Piece::L => (227, 91, 2),
+            Piece::O => (227, 159, 2),
+            Piece::S => (89, 177, 1),
+            Piece::T => (175, 41, 138),
+            Piece::Z => (215, 15, 55),
+        }
+    }
+}
+
+impl Cell {
+    pub const fn color(self) -> (u8, u8, u8) {
+        match self {
+            Cell::Piece(piece) => piece.color(),
+            Cell::Garbage => LOST_COLOR,
+            Cell::Empty => (0, 0, 0),
+        }
     }
 }
 
@@ -36,7 +50,9 @@ fn set_color(o: &mut StdoutLock, (r, g, b): (u8, u8, u8)) -> Result<()> {
     static CURRENT_R: AtomicU8 = AtomicU8::new(0);
     static CURRENT_G: AtomicU8 = AtomicU8::new(0);
     static CURRENT_B: AtomicU8 = AtomicU8::new(0);
-    if CURRENT_R.load(Relaxed) != r || CURRENT_G.load(Relaxed) != g || CURRENT_B.load(Relaxed) != b
+    if CURRENT_R.load(Relaxed) != r
+        || CURRENT_G.load(Relaxed) != g
+        || CURRENT_B.load(Relaxed) != b
     {
         CURRENT_R.store(r, Relaxed);
         CURRENT_G.store(g, Relaxed);
@@ -73,14 +89,15 @@ pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
         text_color,
         &(40 - game.lines as i32).max(0).to_string(),
     )?;
-    let frames = game.current_frame.saturating_sub(120);
-    let mins = frames / 3600;
-    let secs = frames % 3600 / 60;
-    let millis = frames % 60 * 10 / 6;
+    let now = Instant::now();
+    let time = game.end_time.unwrap_or(now).duration_since(game.start_time.unwrap_or(now));
+    let mins = time.as_secs() / 60;
+    let secs = time.as_secs() % 60;
+    let decis = time.as_millis() % 1000 / 100;
     let time = if mins != 0 {
-        format!("{mins}:{secs:02}.{millis:02} ")
+        format!("{mins:2}:{secs:02}.{decis:01} ")
     } else {
-        format!("{secs}.{millis:02} ")
+        format!("{secs:2}.{decis:01} ")
     };
     draw_text(o, (ox + 1, oy + 20), text_color, &time)?;
     Ok(o.flush()?)
@@ -136,18 +153,15 @@ fn draw_board(o: &mut StdoutLock, g: &Game, origin: (i16, i16)) -> Result<()> {
         move_cursor(o, (ox, oy + y as i16 + 1))?;
         for x in 0..10i8 {
             let y = 19 - y;
-            let mut color = g.board[y as usize][x as usize]
-                .map(|p| {
-                    if g.state == GameState::Lost {
-                        LOST_COLOR
-                    } else {
-                        p.color()
-                    }
-                })
-                .unwrap_or((0, 0, 0));
-            if current_pos.contains(&(x, y)) && g.state == GameState::Running {
+            let mut color = g.board[y as usize][x as usize].color();
+            if g.state == GameState::Lost && color != Default::default() {
+                color = LOST_COLOR;
+            } else if current_pos.contains(&(x, y)) && g.state == GameState::Running {
                 color = piece.color()
-            } else if g.config.ghost && ghost.contains(&(x, y)) && g.state == GameState::Running {
+            } else if g.config.ghost
+                && ghost.contains(&(x, y))
+                && g.state == GameState::Running
+            {
                 let (r, g, b) = piece.color();
                 color = (r / 3, g / 3, b / 3);
             }
@@ -164,6 +178,29 @@ pub struct RawMode {
 
 impl RawMode {
     pub fn enter() -> Result<Self> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        thread::spawn(move || -> Result<()> {
+            let mut output = io::stdout().lock();
+            let mut input = io::stdin().lock();
+            write!(output, csi!("?u"))?; // query keyboard mode
+            let mut buf = Vec::new();
+            input.read_until(b'c', &mut buf)?;
+            dbg!(&buf);
+            tx.send(buf.contains(&b'u'))?;
+            Ok(())
+        });
+        match rx.recv_timeout(Duration::from_millis(500)) {
+            Err(RecvTimeoutError::Timeout) => {
+                println!("took too long to respond");
+                exit(1);
+            }
+            Ok(false) => {
+                println!("Your terminal doesn't support the 'kitty input protocol'");
+                exit(1);
+            }
+            _ => {}
+        }
+
         let mut lock = io::stdout().lock();
         let fd = lock.as_raw_fd();
         let mut terminfo = Termios::from_fd(fd)?;
@@ -171,9 +208,6 @@ impl RawMode {
         cfmakeraw(&mut terminfo);
         write!(lock, csi!("?1049h"))?; // switch to alternate screen
         write!(lock, csi!("?25l"))?; // hide cursor
-
-        // TODO detect if this is supported and otherwise error out:
-        // https://sw.kovidgoyal.net/kitty/keyboard-protocol/#detection-of-support-for-this-protocol
         write!(lock, csi!(">15u"))?; // change keyboard mode
         lock.flush().unwrap();
         tcsetattr(fd, TCSADRAIN, &terminfo)?;
@@ -181,7 +215,8 @@ impl RawMode {
     }
 }
 
-// set an atexit handler for this because sometimes it doesnt seem to run?
+// TODO: set an atexit handler for this because sometimes it doesnt seem to run?
+// TODO: panic hook?
 impl Drop for RawMode {
     fn drop(&mut self) {
         fn reset_state(orig: Termios) -> Result<()> {

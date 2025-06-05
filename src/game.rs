@@ -8,7 +8,7 @@ use std::{
 
 pub type Pos = [(i8, i8); 4];
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Piece {
     I,
@@ -68,6 +68,7 @@ pub enum InputEvent {
     Flip,
     Hard,
     Hold,
+    // maybe pull these out along with Garbage/Pause/StartSound to a "misc" event
     Restart,
     Quit,
 }
@@ -82,7 +83,6 @@ pub enum TimerEvent {
     Lock,
     Extended,
     Timeout,
-    StartSound,
     Start,
 }
 
@@ -92,7 +92,7 @@ pub enum Event {
     Input(InputEvent),
 }
 
-const FRAME: Duration = Duration::from_secs_f64(1. / 60.);
+const FRAME: Duration = Duration::from_nanos(16_666_667);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Config {
@@ -104,25 +104,6 @@ pub struct Config {
     pub ghost: bool,
 }
 
-#[derive(Debug, Clone)]
-pub struct Timers {
-    pub das_left: u8,
-    pub das_right: u8,
-    pub arr: i8,
-    // TODO: make soft droppping behave like jstris:
-    // i found experimentally that upon pressing the softdrop key, the soft drop timer AND the
-    // gravity timer are restarted. this means that by repeatedly tapping the softdrop key without
-    // holding it down for a full softdrop delay and without releasing it for a full gravity delay
-    // you can actually cause a piece to remain still, until the timeout eventually forces it to
-    // hard drop. luckily this is pretty easy to implement, we just have to reset the timers every
-    // time you press/release softdrop.
-    pub soft: i8,
-    pub gravity: u16,
-    pub lock: u8,
-    pub extended: u16,
-    pub timeout: u16,
-}
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GameState {
     Startup,
@@ -131,9 +112,17 @@ pub enum GameState {
     Running,
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub enum Cell {
+    Piece(Piece),
+    Garbage,
+    #[default]
+    Empty,
+}
+
 #[derive(Clone)]
 pub struct Game {
-    pub board: [[Option<Piece>; 10]; 23],
+    pub board: [[Cell; 10]; 23],
     pub upcomming: VecDeque<Piece>,
     pub current: (Piece, (i8, i8), Rotation),
     pub hold: Option<Piece>,
@@ -142,9 +131,11 @@ pub struct Game {
     pub timers: VecDeque<(Instant, TimerEvent)>,
     pub started_right: Option<Instant>,
     pub started_left: Option<Instant>,
-    pub last_update: Instant,
     pub can_hold: bool,
     pub state: GameState,
+    pub start_time: Option<Instant>,
+    pub end_time: Option<Instant>,
+    pub last_update: Option<Instant>,
     pub rng: StdRng,
 }
 
@@ -212,7 +203,9 @@ impl Game {
             timers: Default::default(),
             started_left: None,
             started_right: None,
-            last_update: Instant::now(),
+            start_time: None,
+            end_time: None,
+            last_update: None,
             can_hold: true,
             state: GameState::Done,
         }
@@ -222,7 +215,7 @@ impl Game {
         self.state = GameState::Startup;
         self.board = Default::default();
         self.hold = None;
-        self.last_update = Instant::now();
+        self.last_update = Some(Instant::now());
         self.lines = 0;
         self.upcomming.clear();
         self.rng = StdRng::seed_from_u64(seed);
@@ -230,8 +223,10 @@ impl Game {
         while let Some(Piece::Z | Piece::S) = self.upcomming.front() {
             self.pop_piece();
         }
-        player.play("ready");
-        self.set_timer(TimerEvent::StartSound, self.last_update, 60);
+        player.play("ready").ok();
+        // TODO: start sound event?
+        // self.set_timer(TimerEvent::StartSound, self.last_update, 60);
+        self.set_timer(TimerEvent::Start, Instant::now(), 120);
     }
 
     pub fn handle(&mut self, event: Event, time: Instant, player: &Player) {
@@ -245,9 +240,9 @@ impl Game {
                 }
                 self.started_left = Some(time);
                 self.clear_timer(DasRight);
+                self.clear_timer(Arr);
                 self.set_timer(DasLeft, time, self.config.das as u32);
             }
-            Input(ReleaseLeft) => self.clear_timer(DasLeft),
             Input(PressRight) => {
                 if self.try_move((1, 0)) {
                     player.play("move").ok();
@@ -255,7 +250,12 @@ impl Game {
                 }
                 self.started_right = Some(time);
                 self.clear_timer(DasLeft);
+                self.clear_timer(Arr);
                 self.set_timer(DasRight, time, self.config.das as u32);
+            }
+            Input(ReleaseLeft) => {
+                self.clear_timer(DasLeft);
+                // TODO: clear ARR if we were going left
             }
             Input(ReleaseRight) => self.clear_timer(DasRight),
             Input(Hold) => {
@@ -299,27 +299,29 @@ impl Game {
             Timer(Arr) => {
                 todo!()
             }
-            Timer(StartSound) => {
-                player.play("go").ok();
-                self.set_timer(Start, time, 60);
-            }
+            // Timer(StartSound) => {
+            //     player.play("go").ok();
+            //     self.set_timer(Start, time, 60);
+            // }
             Timer(Start) => {
                 self.state = GameState::Running;
                 let next = self.pop_piece();
                 self.spawn(next);
+                self.start_time = Some(time);
             }
         };
-        // set lock timers if on the ground and they arent already set
+        self.last_update = Some(time);
+        // TODO: set lock timers if on the ground and they arent already set
     }
 
     fn set_timer(&mut self, t: TimerEvent, time: Instant, frames: u32) {
         let time = time + FRAME * frames;
-        let idx = self.timers.partition_point(|&(i, ev)| i < time);
+        let idx = self.timers.partition_point(|&(i, _)| i < time);
         self.timers.insert(idx, (time, t))
     }
 
     fn clear_timer(&mut self, t: TimerEvent) {
-        self.timers.retain(|&(i, ev)| ev != t)
+        self.timers.retain(|&(_, ev)| ev != t)
     }
 
     fn hard_drop(&mut self, player: &Player) {
@@ -331,139 +333,13 @@ impl Game {
                 40.. => {
                     player.play("win").or_else(|_| player.play("lock")).ok();
                     self.state = GameState::Done;
-                    return;
+                    Some(())
                 }
                 _ => player.play("line").ok(),
             };
         } else {
             player.play("lose").ok();
             self.state = GameState::Lost;
-            return;
-        }
-    }
-
-    pub fn step(&mut self, inputs: &Inputs, player: &Player) {
-        // buffer das before the game starts
-        match self.state {
-            GameState::Running => {}
-            GameState::Startup => {
-                self.check_das(inputs);
-                match self.current_frame {
-                    0 => {
-                        player.play("ready").ok();
-                    }
-                    60 => {
-                        player.play("go").ok();
-                    }
-                    120 => {
-                        self.state = GameState::Running;
-                        let next = self.pop_piece();
-                        self.spawn(next);
-                    }
-                    _ => {}
-                }
-                self.current_frame += 1;
-                return;
-            }
-            _ => return,
-        }
-        self.current_frame += 1;
-
-        //locking
-        self.timers.timeout += 1;
-        let (piece, pos, rot) = self.current;
-        if !self.check_valid(piece.get_pos(rot, pos).map(|(x, y)| (x, y - 1))) {
-            self.timers.lock += 1;
-            self.timers.extended += 1;
-        } else {
-            self.timers.lock = 0;
-            self.timers.extended = 0;
-        }
-
-        // left/right movement
-        match inputs.dir {
-            Some(Direction::Left) => {
-                self.try_move((-1, 0));
-                self.last_dir = Direction::Left;
-                self.timers.lock = 0;
-                player.play("move").ok();
-            }
-            Some(Direction::Right) => {
-                self.try_move((1, 0));
-                self.last_dir = Direction::Right;
-                self.timers.lock = 0;
-                player.play("move").ok();
-            }
-            // DAS
-            None => {
-                self.check_das(inputs);
-                let (dir, current_das) = match self.last_dir {
-                    Direction::Left => (-1, self.timers.das_left),
-                    Direction::Right => (1, self.timers.das_right),
-                };
-                if current_das == self.config.das {
-                    if self.timers.arr == -1 {
-                        while self.try_move((dir, 0)) && self.config.arr == 0 {}
-                        self.timers.arr = 0;
-                    } else if self.config.arr == 0 {
-                        while self.try_move((dir, 0)) {}
-                    } else {
-                        self.timers.arr += 1;
-                        if self.timers.arr == self.config.arr as i8 {
-                            self.try_move((dir, 0));
-                            self.timers.arr = 0;
-                        }
-                    }
-                } else {
-                    self.timers.arr = -1;
-                }
-            }
-        }
-
-        self.apply_gravity(inputs);
-    }
-
-    fn check_das(&mut self, inputs: &Inputs) {
-        if inputs.left {
-            self.timers.das_left = self.config.das.min(self.timers.das_left + 1);
-            if !inputs.right {
-                self.last_dir = Direction::Left;
-            }
-        } else {
-            self.timers.das_left = 0;
-        }
-        if inputs.right {
-            self.timers.das_right = self.config.das.min(self.timers.das_right + 1);
-            if !inputs.left {
-                self.last_dir = Direction::Right;
-            }
-        } else {
-            self.timers.das_right = 0;
-        }
-    }
-
-    fn apply_gravity(&mut self, inputs: &Inputs) {
-        if inputs.soft {
-            self.timers.gravity = 0;
-            if self.timers.soft != -1 {
-                self.timers.soft += 1;
-                if self.timers.soft == self.config.soft_drop as i8 {
-                    self.try_move((0, -1));
-                    self.timers.soft = 0;
-                }
-            } else {
-                self.try_move((0, -1));
-                self.timers.soft = 0;
-            }
-        } else {
-            self.timers.gravity += 1;
-            if self.timers.gravity == self.config.gravity {
-                self.try_move((0, -1));
-                self.timers.gravity = 0;
-                if self.timers.soft != -1 {
-                    self.timers.soft = 0;
-                }
-            }
         }
     }
 
@@ -479,17 +355,17 @@ impl Game {
         pos.into_iter().all(|(x, y)| {
             (0..10).contains(&x)
                 && (0..30).contains(&y)
-                && self.board[y as usize][x as usize].is_none()
+                && self.board[y as usize][x as usize] == Cell::Empty
         })
     }
 
     fn lock(&mut self) -> bool {
         let (p, pos, rot) = self.current;
         for (x, y) in p.get_pos(rot, pos) {
-            self.board[y as usize][x as usize] = Some(p);
+            self.board[y as usize][x as usize] = Cell::Piece(p);
         }
         for i in (0..23).rev() {
-            if self.board[i].iter().all(|p| p.is_some()) {
+            if self.board[i].iter().all(|c| matches!(c, Cell::Piece(_))) {
                 for j in i..22 {
                     self.board[j] = self.board[j + 1];
                 }
@@ -509,11 +385,14 @@ impl Game {
     }
 
     fn spawn(&mut self, next: Piece) -> bool {
-        self.timers.soft = -1;
-        self.timers.gravity = 0;
-        self.timers.lock = 0;
-        self.timers.extended = 0;
-        self.timers.timeout = 0;
+        {
+            use TimerEvent::*;
+            self.clear_timer(SoftDrop);
+            self.clear_timer(Gravity);
+            self.clear_timer(Lock);
+            self.clear_timer(Extended);
+            self.clear_timer(Timeout);
+        }
         self.can_hold = true;
         let pos = (3, 21);
         let rot = Rotation::North;
@@ -559,21 +438,6 @@ impl Game {
             true
         } else {
             false
-        }
-    }
-}
-
-impl Default for Timers {
-    fn default() -> Self {
-        Self {
-            soft: -1,
-            arr: -1,
-            das_left: 0,
-            das_right: 0,
-            gravity: 0,
-            lock: 0,
-            extended: 0,
-            timeout: 0,
         }
     }
 }
@@ -624,46 +488,32 @@ const DATA: [[Pos; 4]; 7] = [
     ],
 ];
 
-// ordered:
-// n -> e
-// e -> n
-// e -> s
-// s -> e
-// s -> e
-// s -> w
-// w -> s
-// w -> n
-// n -> w
-// n -> s
-// s -> n
-// e -> w
-// w -> e
 const ROTI: [[(i8, i8); 5]; 12] = [
-    [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)],
-    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)],
-    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)],
-    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)],
-    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)],
-    [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)],
-    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)],
-    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)],
-    [(0, 0), (0, 1), (0, 0), (0, 0), (0, 0)],
-    [(0, 0), (0, -1), (0, 0), (0, 0), (0, 0)],
-    [(0, 0), (1, 0), (0, 0), (0, 0), (0, 0)],
-    [(0, 0), (-1, 0), (0, 0), (0, 0), (0, 0)],
+    [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)], // n -> e
+    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)], // e -> n
+    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)], // e -> s
+    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)], // s -> e
+    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)], // s -> w
+    [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)], // w -> s
+    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)], // w -> n
+    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)], // n -> w
+    [(0, 0), (0, 1), (0, 0), (0, 0), (0, 0)],    // n -> s
+    [(0, 0), (0, -1), (0, 0), (0, 0), (0, 0)],   // s -> n
+    [(0, 0), (1, 0), (0, 0), (0, 0), (0, 0)],    // e -> w
+    [(0, 0), (-1, 0), (0, 0), (0, 0), (0, 0)],   // w -> e
 ];
 
 const ROTJLSTZ: [[(i8, i8); 5]; 12] = [
-    [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)],
-    [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],
-    [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],
-    [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)],
-    [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],
-    [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],
-    [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],
-    [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],
-    [(0, 0), (0, 1), (0, 0), (0, 0), (0, 0)],
-    [(0, 0), (0, -1), (0, 0), (0, 0), (0, 0)],
-    [(0, 0), (1, 0), (0, 0), (0, 0), (0, 0)],
-    [(0, 0), (-1, 0), (0, 0), (0, 0), (0, 0)],
+    [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)], // n -> e
+    [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],     // e -> n
+    [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],     // e -> s
+    [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)], // s -> e
+    [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],    // s -> w
+    [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],  // w -> s
+    [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],  // w -> n
+    [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],    // n -> w
+    [(0, 0), (0, 1), (0, 0), (0, 0), (0, 0)],      // n -> s
+    [(0, 0), (0, -1), (0, 0), (0, 0), (0, 0)],     // s -> n
+    [(0, 0), (1, 0), (0, 0), (0, 0), (0, 0)],      // e -> w
+    [(0, 0), (-1, 0), (0, 0), (0, 0), (0, 0)],     // w -> e
 ];
