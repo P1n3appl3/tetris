@@ -57,9 +57,9 @@ impl EventLoop {
             let mut buf = [0; 64];
             loop {
                 let n = stdin.read(&mut buf).unwrap();
-                if let Ok(k) =
-                    crate::input::parse_kitty_key(unsafe { slice::from_raw_parts(buf.as_ptr(), n) })
-                {
+                if let Ok(k) = crate::input::parse_kitty_key(unsafe {
+                    slice::from_raw_parts(buf.as_ptr(), n)
+                }) {
                     if let Some(&ev) = keymap.get(&k) {
                         tx.send(ev).unwrap();
                     }
@@ -70,6 +70,7 @@ impl EventLoop {
     }
 }
 
+// https://sw.kovidgoyal.net/kitty/keyboard-protocol/#detection-of-support-for-this-protocol
 fn parse_kitty_key(buf: &[u8]) -> Result<KeyEvent> {
     assert!(buf.starts_with(b"\x1b["));
     let trailer = *buf.last().unwrap();
@@ -77,11 +78,7 @@ fn parse_kitty_key(buf: &[u8]) -> Result<KeyEvent> {
     let s = str::from_utf8(&buf[2..buf.len() - 1]).unwrap();
     let parts: Vec<Vec<u32>> = s
         .split(';')
-        .map(|s| {
-            s.split(':')
-                .map(|s| s.parse().unwrap_or_default())
-                .collect()
-        })
+        .map(|s| s.split(':').map(|s| s.parse().unwrap_or_default()).collect())
         .collect();
     let code = if trailer == b'u' {
         char::from_u32(parts[0][0]).unwrap()
@@ -98,9 +95,5 @@ fn parse_kitty_key(buf: &[u8]) -> Result<KeyEvent> {
     } else {
         (0, true)
     };
-    Ok(KeyEvent {
-        key: code,
-        mods: mods as u8,
-        press,
-    })
+    Ok(KeyEvent { key: code, mods: mods as u8, press })
 }

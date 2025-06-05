@@ -7,18 +7,12 @@ use crate::{game::Config, keys, sound::Player, Bindings};
 pub fn load() -> Result<(Config, Bindings, Player)> {
     // todo: use dir-rs/dirs/xdg for config dir
     let doc: KdlDocument = fs::read_to_string("settings.kdl")?.parse()?;
-    let config = doc
-        .get("config")
-        .and_then(KdlNode::children)
-        .context("missing config node")?;
-    let sound_node = doc
-        .get("sound")
-        .and_then(KdlNode::children)
-        .context("missing sound node")?;
-    let bindings = doc
-        .get("bindings")
-        .and_then(KdlNode::children)
-        .context("missing bindings node")?;
+    let config =
+        doc.get("config").and_then(KdlNode::children).context("missing config node")?;
+    let sound_node =
+        doc.get("sound").and_then(KdlNode::children).context("missing sound node")?;
+    let bindings =
+        doc.get("bindings").and_then(KdlNode::children).context("missing bindings node")?;
 
     let config = Config {
         das: get_config("das", config)? as u8,
@@ -30,10 +24,7 @@ pub fn load() -> Result<(Config, Bindings, Player)> {
             get_config("extended", config)? as u16,
             get_config("timeout", config)? as u16,
         ),
-        ghost: config
-            .get_arg("ghost")
-            .and_then(KdlValue::as_bool)
-            .unwrap_or(true),
+        ghost: config.get_arg("ghost").and_then(KdlValue::as_bool).unwrap_or(true),
     };
     let bindings = Bindings {
         left: get_binding("left", bindings)?,
@@ -49,11 +40,11 @@ pub fn load() -> Result<(Config, Bindings, Player)> {
     if let Some(f) = sound_node.get_arg("volume").and_then(KdlValue::as_f64) {
         player.volume = f as f32;
     }
-    for sound in [
-        "ready", "go", "move", "rotate", "lock", "line", "hold", "lose", "win",
-    ] {
+    for sound in ["ready", "go", "move", "rotate", "lock", "line", "hold", "lose", "win"] {
         if let Some(s) = sound_node.get_arg(sound).and_then(KdlValue::as_string) {
-            player.add_sound(sound, s)?
+            if let Err(e) = player.add_sound(sound, s) {
+                log::error!("Failed to load sound {sound} from {s}");
+            }
         }
     }
     Ok((config, bindings, player))
@@ -75,7 +66,8 @@ fn get_binding(name: &str, bindings: &KdlDocument) -> Result<char> {
             if s.chars().count() == 1 {
                 Ok(s.chars().next().unwrap())
             } else {
-                keys::get_key(s).context(format!("invalid key name '{s}' for '{name}' binding"))
+                keys::get_key(s)
+                    .context(format!("invalid key name '{s}' for '{name}' binding"))
             }
         })
 }

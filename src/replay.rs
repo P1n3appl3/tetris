@@ -1,9 +1,10 @@
+#![allow(unused)]
 use anyhow::Result;
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 
 use std::{
-    intrinsics::transmute,
     io::{BufReader, BufWriter, Read, Write},
+    mem::transmute,
 };
 
 use crate::game::{Config, Game, GameState};
@@ -16,6 +17,7 @@ pub enum Input {
     Soft,
     Cw,
     Ccw,
+    Flip,
     Hard,
     Hold,
 }
@@ -32,32 +34,26 @@ pub struct Event {
 // also rework soft-drop config to match jstris's
 #[derive(Debug, PartialEq, Eq)]
 pub struct Replay {
-    pub total_frames: u16,
+    pub length: u32,
     pub seed: u64,
     pub config: Config,
     pub events: Vec<Event>,
-    pub current_frame: u16,
+    pub current_ms: u32,
 }
 
 impl Replay {
     pub fn new(config: Config, seed: u64) -> Self {
-        Self {
-            total_frames: 0,
-            current_frame: 0,
-            seed,
-            config,
-            events: Default::default(),
-        }
+        Self { length: 0, current_ms: 0, seed, config, events: Default::default() }
     }
 
-    pub fn push(&mut self, game: &Game, input: Input, press: bool) {
+    pub fn push(&mut self, ms: u32, game: &Game, input: Input, press: bool) {
         if matches!(game.state, GameState::Done | GameState::Lost) {
             return;
         }
-        let elapsed = game.current_frame - self.current_frame;
-        self.current_frame = game.current_frame;
+        let elapsed = ms - self.current_ms;
+        self.current_ms = ms;
         self.events.push(Event {
-            elapsed,
+            elapsed: elapsed.try_into().expect("More than 1m5s between events"),
             press,
             input,
         })
@@ -65,7 +61,7 @@ impl Replay {
 
     pub fn save<W: Write>(&self, w: W) -> Result<()> {
         let mut w = BufWriter::new(w);
-        w.write_u16::<LE>(self.total_frames)?;
+        w.write_u32::<LE>(self.length)?;
         w.write_u64::<LE>(self.seed)?;
         w.write_u16::<LE>(self.config.gravity)?;
         w.write_u8(self.config.soft_drop)?;
@@ -95,7 +91,7 @@ impl Replay {
 
     pub fn load<R: Read>(r: R) -> Result<Self> {
         let mut r = BufReader::new(r);
-        let total_frames = r.read_u16::<LE>()?;
+        let length = r.read_u32::<LE>()?;
         let seed = r.read_u64::<LE>()?;
         let gravity = r.read_u16::<LE>()?;
         let soft_drop = r.read_u8()?;
@@ -117,7 +113,7 @@ impl Replay {
         let mut events = Vec::with_capacity(num_events as usize);
         for _ in 0..num_events {
             let byte = r.read_u8()?;
-            let input = unsafe { transmute(byte >> 4 & 0b111) };
+            let input = unsafe { transmute::<u8, Input>(byte >> 4 & 0b111) };
             let press = byte & 0x80 != 0;
             let time = byte & 0b1111;
             let elapsed = if time != 15 {
@@ -131,20 +127,10 @@ impl Replay {
                     (extra as u16) << 7 | (time as u16 & 0x7f)
                 }
             };
-            events.push(Event {
-                elapsed,
-                press,
-                input,
-            })
+            events.push(Event { elapsed, press, input })
         }
         assert!(r.bytes().next().is_none());
 
-        Ok(Self {
-            total_frames,
-            seed,
-            config,
-            events,
-            current_frame: 0,
-        })
+        Ok(Self { length, seed, config, events, current_ms: 0 })
     }
 }

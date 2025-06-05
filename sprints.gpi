@@ -1,0 +1,38 @@
+set grid
+set isosamples 50
+set hidden3d
+
+text="#cdd6f4"
+base="#1e1e2e"
+blue="#89b4fa"
+red="#f38ba8"
+green="#a6e3a1"
+peach="#fab387"
+
+# set object rectangle from screen 0,0 to screen 1,1 behind fillcolor rgb base fillstyle solid noborder
+#
+# set linetype 1 lw 2 lc rgb blue pointtype 6
+# set linetype 2 lw 2 lc rgb text pointtype 6
+# set linetype 3 lw 2 lc rgb red pointtype 6
+#
+# set border lw 3 lc rgb blue
+# set key textcolor rgb peach
+# set xlabel textcolor rgb green
+# set ylabel textcolor rgb green
+
+set terminal x11 font "Noto Sans,18"
+set tics font "Noto Sans,18"
+set grid novertical
+
+# times
+plot filename using 1 pt 7 ps 1
+pause -1
+
+# finesse
+plot filename using 0:4 pt 7 ps 1
+pause -1
+
+# realtime
+set timefmt "%Y-%m-%dT%H:%M:%S"
+set xdata time
+plot filename using 5:1

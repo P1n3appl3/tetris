@@ -1,17 +1,18 @@
 #![allow(unused)]
-pub const SHIFT: u8 = 0b1;
-pub const ALT: u8 = 0b10;
-pub const CTRL: u8 = 0b100;
-pub const SUPER: u8 = 0b1000;
-pub const HYPER: u8 = 0b10000;
-pub const META: u8 = 0b100000;
+#![cfg_attr(rustfmt, rustfmt_skip)]
+pub const SHIFT:     u8 = 0b1;
+pub const ALT:       u8 = 0b10;
+pub const CTRL:      u8 = 0b100;
+pub const SUPER:     u8 = 0b1000;
+pub const HYPER:     u8 = 0b10000;
+pub const META:      u8 = 0b100000;
 pub const CAPS_LOCK: u8 = 0b1000000;
-pub const NUM_LOCK: u8 = 0b10000000;
+pub const NUM_LOCK:  u8 = 0b10000000;
 
-pub const LEFT: char = '\u{e006}';
-pub const RIGHT: char = '\u{e007}';
-pub const UP: char = '\u{e008}';
-pub const DOWN: char = '\u{e009}';
+pub const LEFT:       char = '\u{e006}';
+pub const RIGHT:      char = '\u{e007}';
+pub const UP:         char = '\u{e008}';
+pub const DOWN:       char = '\u{e009}';
 pub const LEFT_SHIFT: char = '\u{e061}';
 
 pub fn get_key(name: &str) -> Option<char> {
