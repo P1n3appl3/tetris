@@ -23,12 +23,12 @@ bindings {
     hold "a"
 }
 
-// all values are specified in frames
+// all values are specified in frames, fractions are allowed
 config {
     das 6
     arr 0
     gravity 60
-    soft_drop 1
+    soft_drop 1 // multiplier
     ghost true
     // these mirror the 3 jstris lock delays
     lock 30
@@ -40,8 +40,8 @@ config {
 // config {das 10; arr 2; gravity 60; soft_drop 4; ghost true; lock_delay 30 300 1200;}
 
 // TODO: implement line clear delay and ARE
-// TODO: add tetris 99 config (12f das, 2f arr, 6f are)
-// TODO: add puyo-puyo tetris config (9f das, 2f arr, variable are/line delay)
+// TODO: add tetris 99 example config (12f das, 2f arr, 6f are)
+// TODO: add puyo-puyo tetris example config (9f das, 2f arr, variable are/line delay)
 
 sound {
     volume 0.3

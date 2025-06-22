@@ -6,21 +6,31 @@ use rodio::{
 
 use std::{collections::HashMap, fs::File, io::BufReader};
 
-pub struct Player {
+pub trait Player {
+    // TODO: asyncify this to lazy-load sounds while playing
+    // TODO: handle url instead of just path, download to cache
+    fn add_sound(&mut self, name: &str, resource: &str) -> Result<()>;
+    fn set_volume(&mut self, level: f32);
+    fn play(&self, s: &str) -> Result<()>;
+}
+
+pub struct RodioPlayer {
     pub volume: f32,
     _stream: OutputStream,
     handle: OutputStreamHandle,
     sounds: HashMap<String, StaticSamplesBuffer<f32>>,
 }
 
-impl Player {
+impl RodioPlayer {
     pub fn new() -> Result<Self> {
         let (_stream, handle) = OutputStream::try_default()?;
 
         Ok(Self { _stream, handle, sounds: HashMap::new(), volume: 0.5 })
     }
+}
 
-    pub fn add_sound(&mut self, name: &str, filename: &str) -> Result<()> {
+impl Player for RodioPlayer {
+    fn add_sound(&mut self, name: &str, filename: &str) -> Result<()> {
         let decoder = Decoder::new(BufReader::new(File::open(filename)?))?;
         let (channels, rate, samples) = (
             decoder.channels(),
@@ -32,7 +42,7 @@ impl Player {
         Ok(())
     }
 
-    pub fn play(&self, s: &str) -> Result<()> {
+    fn play(&self, s: &str) -> Result<()> {
         if let Some(sound) = self.sounds.get(s) {
             // TODO: cloning the sound on every seems bad. even if volume is dynamic it
             // should probably cache the amplified sounds
@@ -40,5 +50,10 @@ impl Player {
         } else {
             Err(anyhow!("couldn't find sound"))
         }
+    }
+
+    fn set_volume(&mut self, level: f32) {
+        debug_assert!((0.0..=1.0).contains(&level));
+        self.volume = level;
     }
 }

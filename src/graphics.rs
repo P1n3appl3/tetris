@@ -1,4 +1,4 @@
-use crate::game::{Cell, Game, GameState, Piece, Rotation};
+use tetris::{Cell, Game, GameState, Piece, Rotation};
 
 use anyhow::{anyhow, Result};
 use termios::*;
@@ -21,9 +21,14 @@ macro_rules! csi {
 
 const BG_COLOR: (u8, u8, u8) = (20, 20, 20);
 const DONE_COLOR: (u8, u8, u8) = (106, 106, 106);
+const LOST_COLOR: (u8, u8, u8) = (106, 106, 106); // TODO: differentiate from DONE
 
-impl Piece {
-    pub const fn color(self) -> (u8, u8, u8) {
+trait Color {
+    fn color(self) -> (u8, u8, u8);
+}
+
+impl Color for Piece {
+    fn color(self) -> (u8, u8, u8) {
         match self {
             Piece::I => (15, 155, 215),
             Piece::J => (33, 65, 198),
@@ -36,8 +41,8 @@ impl Piece {
     }
 }
 
-impl Cell {
-    pub const fn color(self) -> (u8, u8, u8) {
+impl Color for Cell {
+    fn color(self) -> (u8, u8, u8) {
         match self {
             Cell::Piece(piece) => piece.color(),
             Cell::Garbage => LOST_COLOR,
@@ -154,7 +159,7 @@ fn draw_board(o: &mut StdoutLock, g: &Game, origin: (i16, i16)) -> Result<()> {
         for x in 0..10i8 {
             let y = 19 - y;
             let mut color = g.board[y as usize][x as usize].color();
-            if g.state == GameState::Lost && color != Default::default() {
+            if g.state == GameState::Done && color != Default::default() {
                 color = LOST_COLOR;
             } else if current_pos.contains(&(x, y)) && g.state == GameState::Running {
                 color = piece.color()

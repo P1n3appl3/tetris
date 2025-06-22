@@ -26,10 +26,11 @@ while [ "$len" -eq 200 ]; do
     time=$(bc <<<"$longest + .001")
     ((cur += len))
     echo -e "$cur games \t (up to ${time}s)"
-    sleep 1 # TODO: read Retry-After header when 429's happen for better rate limiting
+    sleep 2 # TODO: read Retry-After header when 429's happen for better rate limiting
 done
 
 sort -k5 "$f" | column -t | sponge "$f"
 
 echo -e "\nrun:\n\ngnuplot -e \"filename='$f'\" sprints.gpi\n"
-echo "for pretty graphs. check scripts.gpi for some more options"
+echo -e "for pretty graphs. check scripts.gpi for some more options or try\n"
+echo -e "python chart-times.py $f"

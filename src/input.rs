@@ -8,8 +8,7 @@ use std::{
 
 use anyhow::{anyhow, Result};
 
-use crate::game::{Direction, InputEvent, Spin};
-use crate::keys::*;
+use tetris::{settings::keys::*, InputEvent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct KeyEvent {
@@ -29,27 +28,29 @@ pub struct EventLoop {
 }
 
 impl EventLoop {
-    pub fn start(bindings: crate::Bindings) -> Self {
+    pub fn start(bindings: tetris::Bindings) -> Self {
         let (tx, rx) = mpsc::channel();
 
         thread::spawn(move || {
             let mut stdin = io::stdin().lock();
-            use {Direction::*, InputEvent::*};
+            use InputEvent::*;
             let keymap = [
-                ((bindings.left, 0, true), PressDir(Left)),
-                ((bindings.left, 0, false), ReleaseDir(Left)),
-                ((bindings.right, 0, true), PressDir(Right)),
-                ((bindings.right, 0, false), ReleaseDir(Right)),
+                ((bindings.left, 0, true), PressLeft),
+                ((bindings.left, 0, false), ReleaseLeft),
+                ((bindings.right, 0, true), PressRight),
+                ((bindings.right, 0, false), ReleaseRight),
                 ((bindings.soft, 0, true), PressSoft),
                 ((bindings.soft, 0, false), ReleaseSoft),
                 ((bindings.hard, 0, true), Hard),
-                ((bindings.cw, 0, true), Rotate(Spin::Cw)),
-                ((bindings.ccw, 0, true), Rotate(Spin::Ccw)),
-                ((bindings.flip, 0, true), Rotate(Spin::Flip)),
+                ((bindings.cw, 0, true), Cw),
+                ((bindings.ccw, 0, true), Ccw),
+                ((bindings.flip, 0, true), Flip),
                 ((bindings.hold, 0, true), Hold),
                 (('r', 0, true), Restart),
                 (('q', 0, true), Quit),
-                (('c', crate::keys::CTRL, true), Quit),
+                (('c', CTRL, true), Quit),
+                // (('u', 0, true), Undo),
+                // (('r', CTRL, true), Redo),
             ]
             .into_iter()
             .map(|(k, i)| (k.into(), i))
@@ -68,7 +69,24 @@ impl EventLoop {
     }
 }
 
-// https://sw.kovidgoyal.net/kitty/keyboard-protocol/#detection-of-support-for-this-protocol
+fn trailer_map(c: u8) -> char {
+    match c {
+        b'A' => UP,
+        b'B' => DOWN,
+        b'C' => RIGHT,
+        b'D' => LEFT,
+        b'E' => '\u{e053}',
+        b'F' => '\u{e00d}',
+        b'H' => '\u{e00c}',
+        b'P' => '\u{e014}',
+        b'Q' => '\u{e015}',
+        b'R' => '\u{e001}',
+        b'S' => '\u{e003}',
+        _ => unreachable!(),
+    }
+}
+
+// https://sw.kovidgoyal.net/kitty/keyboard-protocol#detection-of-support-for-this-protocol
 fn parse_kitty_key(buf: &[u8]) -> Result<KeyEvent> {
     assert!(buf.starts_with(b"\x1b["));
     let trailer = *buf.last().unwrap();

@@ -1,12 +1,6 @@
-use std::{
-    io::{BufReader, BufWriter, Read, Write},
-    mem::transmute,
-};
-
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::game::{Config, Event, Game, GameState, InputEvent};
+use crate::{Config, InputEvent};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReplayEvent {
@@ -24,7 +18,7 @@ pub struct Replay {
     pub config: Config,
     pub events: Vec<ReplayEvent>,
     // TODO: include optional sounds and skin (by link or directly encoded?)
-    // for portable 1:1 viewing
+    // for full roundtrappable replays
 }
 
 impl Replay {

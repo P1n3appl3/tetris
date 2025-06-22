@@ -1,48 +1,50 @@
-mod game;
 mod graphics;
 mod input;
-mod keys;
-mod replay;
-mod settings;
-mod sound;
 
 use std::{
-    fs::File,
+    fs::{self, File},
     path::Path,
     sync::mpsc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use game::{Event, Game, GameState, InputEvent};
 use graphics::RawMode;
 use input::EventLoop;
-use keys::*;
 use log::{error, info};
 use rand::prelude::*;
-use replay::Replay;
-use sound::Player;
+use tetris::{
+    replay::Replay,
+    sound::{Player, RodioPlayer},
+    Event, Game, GameState, InputEvent,
+};
 
 fn main() {
-    // TODO: on first run create config file and print help, maybe open config in editor?
-    // TODO: error on failed kitty input mode detection, print list of links (wez/kitty/alacritty/ghost/foot/iterm2/rio)
+    // TODO: on first run create config file and print help, maybe open config in
+    // editor? TODO: error on failed kitty input mode detection, print list of
+    // links (wez/kitty/alacritty/ghost/foot/iterm2/rio)
     ftail::Ftail::new()
         .single_file(Path::new("log.txt"), true, log::LevelFilter::Debug)
         .init()
         .ok();
+    // todo: use dir-rs/dirs/xdg for config dir
+    let settings =
+        fs::read_to_string("assets/settings.kdl").expect("Couldn't find settings file");
+    let mut player = RodioPlayer::new().expect("Failed to initialize audio engine");
+    let (config, keys) =
+        tetris::settings::load(&settings, &mut player).expect("Invalid settings file");
     let _mode = RawMode::enter();
-    let (config, keys, player) = settings::load().unwrap();
     let input = EventLoop::start(keys);
     let mut game = Game::new(config);
     while run_game(&mut game, &input, &player) {}
 }
 
-fn run_game(game: &mut Game, input: &EventLoop, player: &Player) -> bool {
+fn run_game(game: &mut Game, input: &EventLoop, player: &impl Player) -> bool {
     let (width, height) = get_size();
     if width < 40 || height < 22 {
         panic!("screen too small");
     }
 
-    let seed = thread_rng().gen();
+    let seed = rand::rng().random();
     game.start(seed, player);
     let replay = Replay::new(game.config, seed);
 
@@ -75,8 +77,8 @@ fn run_game(game: &mut Game, input: &EventLoop, player: &Player) -> bool {
             }
         }
 
-        // TODO: draw every tenth of a second in a separate loop, checking a "paused" atomic bool
-        // that's set by this thread based on gamestate
+        // TODO: draw every tenth of a second in a separate loop, checking a "paused"
+        // atomic bool that's set by this thread based on gamestate
         graphics::draw(width as i16, height as i16, game).unwrap();
     };
 
@@ -85,42 +87,17 @@ fn run_game(game: &mut Game, input: &EventLoop, player: &Player) -> bool {
             .duration_since(UNIX_EPOCH)
             .expect("time went backwards")
             .as_secs();
-        {
-            let replayfile = File::create(format!("replays/{time}.bin")).unwrap();
-            replay.save(replayfile).unwrap();
-        }
+        let path = format!("replays/{time}.bin");
+        let raw_replay =
+            serde_json::to_string_pretty(&replay).expect("Failed to serialize replay");
+        fs::write(&path, &raw_replay).expect("Failed to write replay");
         // does it round-trip?
-        let replayfile = File::open(format!("replays/{time}.bin")).unwrap();
-        debug_assert_eq!(replay, Replay::load(replayfile).unwrap());
+        let raw_replay = fs::read_to_string(&path).expect("Failed to read replay");
+        let round_trip =
+            serde_json::from_str(&raw_replay).expect("Failed to deserialize replay");
+        debug_assert_eq!(replay, round_trip);
     }
     done
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct Bindings {
-    pub left: char,
-    pub right: char,
-    pub soft: char,
-    pub hard: char,
-    pub cw: char,
-    pub ccw: char,
-    pub flip: char,
-    pub hold: char,
-}
-
-impl Default for Bindings {
-    fn default() -> Self {
-        Self {
-            left: LEFT,
-            right: RIGHT,
-            soft: DOWN,
-            hard: UP,
-            cw: 'x',
-            ccw: 'z',
-            flip: 'a',
-            hold: LEFT_SHIFT,
-        }
-    }
 }
 
 fn get_size() -> (u16, u16) {

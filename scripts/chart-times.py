@@ -1,14 +1,10 @@
 #!/usr/bin/env python
 
 from __future__ import annotations
-from typing import List
-from bs4 import BeautifulSoup
 from dataclasses import dataclass
 from datetime import timedelta, datetime, time
 import matplotlib.pyplot as plt
 from pathlib import Path
-import pickle
-import requests
 import sys
 import statistics
 
@@ -20,52 +16,19 @@ class Game:
     pps: float
     faults: int
     date: datetime
-    # TODO: optional replay link
+    replay: int
 
     @staticmethod
     def from_row(row) -> Game:
-        if ":" not in row[0]:
-            row[0] = "0:" + row[0]
-        if "." not in row[0]:
-            row[0] = row[0] + ".0"
-        t = datetime.strptime(row[0], "%M:%S.%f")
         return Game(
-            t - datetime.combine(t.date(), time.min),
+            timedelta(seconds=float(row[0])),
             int(row[1]),
             float(row[2]),
             int(row[3]),
-            datetime.strptime(row[4], "%Y-%m-%d %H:%M:%S"),
+            datetime.strptime(row[4], "%Y-%m-%dT%H:%M:%S"),
+            int(row[5]) if row[5] != "null" else 0,
         )
 
-
-def get_games(user) -> List[Game]:
-    path = Path(user + ".games")
-    games = []
-
-    if path.exists():
-        print(f'Reading cached games, to grab fresh data delete "{path}"')
-        with open(path, "rb") as f:
-            games = pickle.load(f)
-    else:
-        url = f"https://jstris.jezevec10.com/sprint?display=5&user={user}&page="
-        current = "0"
-        while True:
-            print("Getting next batch of times starting at:", current)
-            response = requests.request("GET", url + current)
-            soup = BeautifulSoup(response.text, "html.parser")
-            rows = soup.table.find_all("tr")[1:]
-            for row in rows:
-                cols = [c.text.strip() for c in row.find_all("td")][2:-1]
-                games.append(Game.from_row(cols))
-            if len(rows) < 200:
-                break
-            current = str(games[-1].time.total_seconds() + 0.001)
-
-        print("Got", len(games), "total games. Writing to file...")
-        with open(path, "wb") as f:
-            pickle.dump(games, f)
-
-    return games
 
 def graph_times(games):
     print("Here's a pretty graph:")
@@ -85,7 +48,7 @@ def graph_times(games):
     avgs = []
     avgsn = []
     n = 50
-    for (i, time) in points:
+    for i, time in points:
         sums.append(sums[-1] + time)
         if i >= n:
             avgsn.append((i, (sums[-1] - sums[-(n + 1)]) / n))
@@ -94,7 +57,7 @@ def graph_times(games):
             mins.append((i, time))
 
     if Path("gruvbox").exists():
-        plt.style.use('gruvbox')
+        plt.style.use("gruvbox")
     plt.scatter(*(zip(*points)), s=1, label="times")
     plt.plot(*(zip(*avgs)), label="rolling average")
     plt.plot(*(zip(*avgsn)), label=f"average of {n}")
@@ -104,6 +67,7 @@ def graph_times(games):
     plt.legend()
     plt.grid(axis="x")
     plt.show()
+
 
 def graph_faults(games):
     print("Here's a pretty graph:")
@@ -116,7 +80,7 @@ def graph_faults(games):
     avgs = []
     avgsn = []
     n = 50
-    for (i, time) in points:
+    for i, time in points:
         sums.append(sums[-1] + time)
         if i >= n:
             avgsn.append((i, (sums[-1] - sums[-(n + 1)]) / n))
@@ -134,10 +98,14 @@ def graph_faults(games):
     plt.grid(axis="x")
     plt.show()
 
+
 if __name__ == "__main__":
     if not 1 < len(sys.argv) < 3:
-        print("Usage:\n\t`python tetris.py <username>`")
+        print("Usage:\n\t`python chart-times.py <username>.games`")
         sys.exit(1)
-    games = get_games(sys.argv[-1])
+    games = []
+    for line in open(sys.argv[-1]):
+        games.append(Game.from_row(line.split()))
+
     graph_times(games)
     # graph_faults(games)

@@ -1,3 +1,7 @@
+pub mod replay;
+pub mod settings;
+pub mod sound;
+
 use std::{
     collections::VecDeque,
     time::{Duration, Instant},
@@ -23,29 +27,13 @@ pub enum Piece {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[repr(i8)]
-pub enum Direction {
-    Left = -1,
-    Right = 1,
-}
-
-impl Direction {
-    fn reverse(self) -> Self {
-        match self {
-            Self::Left => Self::Right,
-            Self::Right => Self::Left,
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Spin {
     Cw,
     Ccw,
     Flip,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Rotation {
     #[default]
@@ -57,23 +45,30 @@ pub enum Rotation {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InputEvent {
-    PressDir(Direction),
-    ReleaseDir(Direction),
+    PressLeft,
+    ReleaseLeft,
+    PressRight,
+    ReleaseRight,
     PressSoft,
     ReleaseSoft,
-    Rotate(Spin),
+    Cw,
+    Ccw,
+    Flip,
     Hard,
     Hold,
     // maybe pull these out along with Garbage/Pause/StartSound to a "misc" event
     Restart,
     Quit,
+    // Undo,
+    // Redo,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TimerEvent {
-    Das(Direction),
+    DasLeft,
+    DasRight,
     Arr,
-    SoftDrop,
+    SoftDrop, // TODO: only use 1 timer for gravity?
     Gravity,
     Lock,
     Extended,
@@ -101,6 +96,34 @@ pub struct Config {
     pub ghost: bool,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct Bindings {
+    pub left: char,
+    pub right: char,
+    pub soft: char,
+    pub hard: char,
+    pub cw: char,
+    pub ccw: char,
+    pub flip: char,
+    pub hold: char,
+}
+
+impl Default for Bindings {
+    fn default() -> Self {
+        use settings::keys::*;
+        Self {
+            left: LEFT,
+            right: RIGHT,
+            soft: DOWN,
+            hard: UP,
+            cw: 'x',
+            ccw: 'z',
+            flip: 'a',
+            hold: LEFT_SHIFT,
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GameState {
     Startup,
@@ -118,7 +141,7 @@ pub enum Cell {
 
 #[derive(Clone)]
 pub struct Game {
-    pub board: [[Cell; 10]; 30], // hope no one stacks higher than this 👀
+    pub board: [[Cell; 10]; 50], // hope no one stacks higher than this 👀
     pub upcomming: VecDeque<Piece>,
     pub current: (Piece, (i8, i8), Rotation),
     pub hold: Option<Piece>,
@@ -127,14 +150,12 @@ pub struct Game {
     pub timers: VecDeque<(Instant, TimerEvent)>,
     pub started_right: Option<Instant>,
     pub started_left: Option<Instant>,
-    pub start_time: Instant,
-    pub current_time: Instant,
+    pub last_update: Option<Instant>,
+    pub start_time: Option<Instant>,
+    pub end_time: Option<Instant>,
     pub soft_dropping: bool,
     pub can_hold: bool,
     pub state: GameState,
-    pub start_time: Option<Instant>,
-    pub end_time: Option<Instant>,
-    pub last_update: Option<Instant>,
     pub rng: StdRng,
 }
 
@@ -191,32 +212,29 @@ impl Piece {
 
 impl Game {
     pub fn new(config: Config) -> Self {
-        let t = Instant::now();
         Self {
             config,
-            rng: StdRng::from_entropy(),
-            board: Default::default(),
+            rng: StdRng::from_os_rng(),
+            board: [[Cell::Empty; 10]; 50],
             upcomming: Default::default(),
             current: (Piece::I, (0, 0), Rotation::North),
             hold: None,
             lines: 0,
             timers: Default::default(),
-            started_left: None,
             started_right: None,
+            started_left: None,
+            last_update: None,
             start_time: None,
             end_time: None,
-            last_update: None,
-            start_time: t,
-            current_time: t,
             soft_dropping: false,
             can_hold: true,
             state: GameState::Done,
         }
     }
 
-    pub fn start(&mut self, seed: u64, player: &Player) {
+    pub fn start(&mut self, seed: u64, player: &impl Player) {
         self.state = GameState::Startup;
-        self.board = Default::default();
+        self.board = [[Cell::Empty; 10]; 50];
         self.hold = None;
         self.last_update = Some(Instant::now());
         self.lines = 0;
@@ -226,23 +244,17 @@ impl Game {
         while let Some(Piece::Z | Piece::S) = self.upcomming.front() {
             self.pop_piece();
         }
-        player.play("ready").ok();
+        player.play("start").ok();
         // TODO: combine "ready" and "go" sounds
         // TODO: make startup time configurable
         self.set_timer(TimerEvent::Start, Instant::now(), 120);
     }
 
-    pub fn handle_event(&mut self, event: Event, time: Instant, player: &Player) {
-        self.current_time = time;
+    pub fn handle(&mut self, event: Event, time: Instant, player: &impl Player) {
         use {Event::*, GameState::*, InputEvent::*, TimerEvent::*};
         match event {
-            Input(PressDir(dir)) => {
-                self.last_dir = dir;
-                self.set_timer(Das(dir));
-                if self.dasing {
-                    self.das_charged = true;
-                }
-                if self.state == Running && self.try_shift(dir) {
+            Input(PressLeft) => {
+                if self.state == Running && self.try_move((-1, 0)) {
                     player.play("move").ok();
                     self.clear_timer(Lock);
                 }
@@ -252,7 +264,7 @@ impl Game {
                 self.set_timer(DasLeft, time, self.config.das as u32);
             }
             Input(PressRight) => {
-                if self.try_move((1, 0)) {
+                if self.state == Running && self.try_move((1, 0)) {
                     player.play("move").ok();
                     self.clear_timer(Lock);
                 }
@@ -263,9 +275,24 @@ impl Game {
             }
             Input(ReleaseLeft) => {
                 self.clear_timer(DasLeft);
-                // TODO: clear ARR if we were going left
+                if match (self.started_left, self.started_right) {
+                    (None, _) => unreachable!("had to be holding left"),
+                    (Some(_), None) => true,
+                    (Some(l), Some(r)) => l > r,
+                } {
+                    self.clear_timer(Arr);
+                }
             }
-            Input(ReleaseRight) => self.clear_timer(DasRight),
+            Input(ReleaseRight) => {
+                self.clear_timer(DasRight);
+                if match (self.started_left, self.started_right) {
+                    (_, None) => unreachable!("had to be holding left"),
+                    (None, Some(_)) => true,
+                    (Some(l), Some(r)) => l < r,
+                } {
+                    self.clear_timer(Arr);
+                }
+            }
             Input(Hold) => {
                 if self.can_hold {
                     if !self.hold() {
@@ -278,26 +305,52 @@ impl Game {
                     }
                 } else {
                     // TODO: add failed hold sound
-                    // player.play("nohold");
+                    player.play("nohold");
                 }
             }
             Input(Hard) | Timer(Lock | Extended | Timeout) => self.hard_drop(player),
-            Timer(t @ (SoftDrop | Gravity)) => {
+            Timer(_t @ (SoftDrop | Gravity)) => {
                 self.try_drop();
-                self.set_timer(t);
-            }
-            Timer(StartSound) => {
-                player.play("go").ok();
-                self.set_timer(Start, time, 60);
+                // self.set_timer(t);
             }
             Timer(Start) => {
-                self.start_time = self.current_time;
                 self.state = GameState::Running;
                 let next = self.pop_piece();
                 self.spawn(next);
                 self.start_time = Some(time);
             }
+            Input(rot @ (Cw | Ccw | Flip)) => {
+                if self.try_rotate(rot.try_into().expect("should always be a rotation")) {
+                    self.clear_timer(Lock);
+                    player.play("rotate").ok();
+                }
+                self.clear_timer(Extended);
+            }
+            Input(PressSoft) => {
+                self.clear_timer(Gravity);
+                self.set_timer(SoftDrop, time, self.config.soft_drop as u32);
+            }
+            Input(ReleaseSoft) => {
+                self.clear_timer(SoftDrop);
+                self.set_timer(Gravity, time, self.config.gravity as u32);
+            }
             Input(Restart | Quit) => unreachable!("should be handled in outer event loop"),
+            // Input(Undo | Redo) => {
+            //     // this might make using instants impossible... if you undo you'd want to
+            //     // also roll back the current time
+            //     unreachable!("should be handled in outer event loop")
+            // }
+            Timer(DasLeft) => {
+                // TODO: add das sound effect
+                todo!()
+            }
+            Timer(DasRight) => {
+                // TODO: add das sound effect
+                todo!()
+            }
+            Timer(Arr) => {
+                todo!()
+            }
         };
         self.last_update = Some(time);
         // TODO: set lock timers if on the ground and they arent already set
@@ -313,24 +366,27 @@ impl Game {
         self.timers.retain(|&(_, ev)| ev != t)
     }
 
-    fn hard_drop(&mut self, player: &Player) {
+    fn hard_drop(&mut self, player: &impl Player) {
         while self.try_drop() {}
         let old_lines = self.lines;
+        // TODO: redo with "piece placement result struct"
         if self.lock() {
             match self.lines {
                 n if n == old_lines => {
                     player.play("lock").ok();
                 }
+                0..40 => {
+                    player.play("line").ok();
+                }
                 40.. => {
                     // TODO: maybe just play both at the same time?
                     player.play("win").or_else(|_| player.play("lock")).ok();
                     self.state = GameState::Done;
-                    Some(())
                 }
             };
         } else {
             player.play("lose").ok();
-            self.state = GameState::Lost;
+            self.state = GameState::Done;
         }
     }
 
@@ -375,6 +431,13 @@ impl Game {
         next
     }
 
+    fn handle_instant_das(&self) {
+        // TODO: check if started left or started right minus current time is more than das threshhold, if so find which is bigger and
+        // if self.config.arr = 0 {
+        //     while self.try_shift(self.last_dir) {}
+        // }
+    }
+
     fn spawn(&mut self, next: Piece) -> bool {
         {
             use TimerEvent::*;
@@ -392,11 +455,10 @@ impl Game {
         }
         self.current = (next, (3, 21), Rotation::North);
         self.try_drop();
-        self.set_timer(if self.soft_dropping { SoftDrop } else { Gravity });
-        self.set_timer(Timeout);
-        if self.dasing && self.config.arr == 0 {
-            while self.try_shift(self.last_dir) {}
-        }
+        // TODO
+        // self.set_timer(if self.soft_dropping { SoftDrop } else { Gravity });
+        // self.set_timer(Timeout);
+        self.handle_instant_das();
         true
     }
 
@@ -420,43 +482,23 @@ impl Game {
             if self.check_valid(displaced) {
                 self.current.1 = (pos.0 + dx, pos.1 + dy);
                 self.current.2 = new_rot;
-                if self.dasing && self.config.arr == 0 {
-                    while self.try_shift(self.last_dir) {}
-                }
+                self.handle_instant_das();
                 return true;
             }
         }
         false
     }
 
-    fn try_shift(&mut self, dir: Direction) -> bool {
-        use {Direction::*, TimerEvent::*};
-        let dx = match dir {
-            Left => -1,
-            Right => 1,
-        };
-        self.try_move((dx, 0))
-            .then(|| {
-                if self.can_drop() {
-                    self.clear_timer(Lock);
-                } else if !self.timers.iter().any(|(_, ev)| *ev == Lock) {
-                    self.set_timer(Lock);
-                }
-            })
-            .is_some()
-    }
-
     fn try_drop(&mut self) -> bool {
-        use TimerEvent::*;
         self.try_move((0, -1))
             .then(|| {
-                if self.can_drop() {
-                    self.clear_timer(Lock);
-                    self.clear_timer(Extended);
-                } else {
-                    self.set_timer(Lock);
-                    self.set_timer(Extended);
-                }
+                // if self.can_drop() {
+                //     self.clear_timer(Lock);
+                //     self.clear_timer(Extended);
+                // } else {
+                //     self.set_timer(Lock);
+                //     self.set_timer(Extended);
+                // }
             })
             .is_some()
     }
@@ -475,6 +517,19 @@ impl Game {
         } else {
             false
         }
+    }
+}
+
+impl TryFrom<InputEvent> for Spin {
+    type Error = ();
+
+    fn try_from(value: InputEvent) -> Result<Self, ()> {
+        Ok(match value {
+            InputEvent::Cw => Spin::Cw,
+            InputEvent::Ccw => Spin::Ccw,
+            InputEvent::Flip => Spin::Flip,
+            _ => return Err(()),
+        })
     }
 }
 

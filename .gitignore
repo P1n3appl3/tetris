@@ -1,6 +1,6 @@
 /target
-*.txt
-*.games
+**/*.txt
+**/*.games
 
 .direnv
 result
