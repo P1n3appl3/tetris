@@ -19,13 +19,14 @@ use tetris::{
 };
 
 fn main() {
-    // TODO: on first run create config file and print help, maybe open config in
-    // editor? TODO: error on failed kitty input mode detection, print list of
-    // links (wez/kitty/alacritty/ghost/foot/iterm2/rio)
+    // TODO: on first run create config file and print help, maybe open config in editor?
+    // TODO: add mode to generate bindings for config with input prompts accepting raw mode keypresses
+    // TODO: error on failed kitty input mode detection, print list of links (wez/kitty/alacritty/ghost/foot/iterm2/rio)
     ftail::Ftail::new()
         .single_file(Path::new("log.txt"), true, log::LevelFilter::Debug)
         .init()
         .ok();
+    log_panics::init();
     // todo: use dir-rs/dirs/xdg for config dir
     let settings =
         fs::read_to_string("assets/settings.kdl").expect("Couldn't find settings file");
@@ -62,11 +63,12 @@ fn run_game(game: &mut Game, input: &EventLoop, player: &impl Player) -> bool {
             Ok(InputEvent::Restart) => break true,
             Ok(InputEvent::Quit) => break false,
             Ok(input_event) => {
+                info!("{input_event:?}");
                 game.handle(Event::Input(input_event), Instant::now(), player)
             }
             Err(Timeout) => {
                 if let Some((t, timer_event)) = game.timers.pop_front() {
-                    info!("{:?}, {timer_event:?}", deadline - Instant::now());
+                    info!("{timer_event:?}");
                     game.handle(Event::Timer(timer_event), Instant::now(), player);
                     debug_assert!(t < Instant::now());
                 }
@@ -77,7 +79,7 @@ fn run_game(game: &mut Game, input: &EventLoop, player: &impl Player) -> bool {
             }
         }
 
-        // TODO: draw every tenth of a second in a separate loop, checking a "paused"
+        // TODO: draw timers every tenth of a second in a separate loop, checking a "paused"
         // atomic bool that's set by this thread based on gamestate
         graphics::draw(width as i16, height as i16, game).unwrap();
     };

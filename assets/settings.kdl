@@ -28,8 +28,8 @@ config {
     das 6
     arr 0
     gravity 60
-    soft_drop 1 // multiplier
-    ghost true
+    soft_drop 2
+    ghost #true
     // these mirror the 3 jstris lock delays
     lock 30
     extended 300
@@ -45,13 +45,13 @@ config {
 
 sound {
     volume 0.3
-    ready "sounds/ready.ogg"
-    go "sounds/go.ogg"
-    move "sounds/move.ogg"
-    rotate null
-    lock "sounds/lock.ogg"
-    line "sounds/line.ogg"
-    hold null
-    lose "sounds/topout.ogg"
-    win null
+    ready "assets/sounds/ready.ogg"
+    go "assets/sounds/go.ogg"
+    move "assets/sounds/move.ogg"
+    rotate #null
+    lock "assets/sounds/lock.ogg"
+    line "assets/sounds/line.ogg"
+    hold #null
+    lose "assets/sounds/topout.ogg"
+    win #null
 }

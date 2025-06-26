@@ -1,10 +1,11 @@
+use log::{error, info};
 use tetris::{Cell, Game, GameState, Piece, Rotation};
 
 use anyhow::{anyhow, Result};
 use termios::*;
 
 use std::{
-    io::{self, BufRead, StdoutLock, Write},
+    io::{self, BufRead, Read as _, StdoutLock, Write},
     os::unix::prelude::AsRawFd,
     process::exit,
     sync::{
@@ -75,6 +76,7 @@ fn move_cursor(o: &mut StdoutLock, (x, y): (i16, i16)) -> Result<()> {
 pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
     let mut lock = io::stdout().lock();
     let o = &mut lock;
+    // Origin is top left of drawing area
     let (ox, oy) = (width / 2 - 19, height / 2 - 11);
     draw_board(o, game, (ox + 10, oy))?;
     if let Some(hold) = game.hold {
@@ -185,22 +187,26 @@ impl RawMode {
     pub fn enter() -> Result<Self> {
         let (tx, rx) = std::sync::mpsc::channel();
         thread::spawn(move || -> Result<()> {
-            let mut output = io::stdout().lock();
-            let mut input = io::stdin().lock();
-            write!(output, csi!("?u"))?; // query keyboard mode
-            let mut buf = Vec::new();
-            input.read_until(b'c', &mut buf)?;
-            dbg!(&buf);
+            {
+                let mut output = io::stdout().lock();
+                write!(output, csi!("?u"))?; // query keyboard mode
+            }
+            let mut buf = [0; 32];
+            {
+                let mut input = io::stdin().lock();
+                let _ = input.read(&mut buf);
+            }
+            // TODO: debug, this doesn't print until after the recv_timeout happens for some reason?
+            // info!("{buf:?}");
             tx.send(buf.contains(&b'u'))?;
             Ok(())
         });
         match rx.recv_timeout(Duration::from_millis(500)) {
             Err(RecvTimeoutError::Timeout) => {
-                println!("took too long to respond");
-                exit(1);
+                error!("feature detection took too long to respond, lets just assume your terminal supports the input protocol...");
             }
             Ok(false) => {
-                println!("Your terminal doesn't support the 'kitty input protocol'");
+                error!("Your terminal doesn't support the 'kitty input protocol'");
                 exit(1);
             }
             _ => {}

@@ -61,6 +61,8 @@ pub enum InputEvent {
     Quit,
     // Undo,
     // Redo,
+    // Garbage(n) // just for garbage line timer, need special handling to displace current piece upwards
+    // Attack(n)
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -74,6 +76,7 @@ pub enum TimerEvent {
     Extended,
     Timeout,
     Start,
+    Are,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -148,9 +151,9 @@ pub struct Game {
     pub lines: u16,
     pub config: Config,
     pub timers: VecDeque<(Instant, TimerEvent)>,
+    pub time: Instant,
     pub started_right: Option<Instant>,
     pub started_left: Option<Instant>,
-    pub last_update: Option<Instant>,
     pub start_time: Option<Instant>,
     pub end_time: Option<Instant>,
     pub soft_dropping: bool,
@@ -223,7 +226,7 @@ impl Game {
             timers: Default::default(),
             started_right: None,
             started_left: None,
-            last_update: None,
+            time: Instant::now(),
             start_time: None,
             end_time: None,
             soft_dropping: false,
@@ -236,22 +239,23 @@ impl Game {
         self.state = GameState::Startup;
         self.board = [[Cell::Empty; 10]; 50];
         self.hold = None;
-        self.last_update = Some(Instant::now());
         self.lines = 0;
         self.upcomming.clear();
         self.rng = StdRng::seed_from_u64(seed);
         self.fill_bag();
+        self.time = Instant::now();
         while let Some(Piece::Z | Piece::S) = self.upcomming.front() {
             self.pop_piece();
         }
         player.play("start").ok();
         // TODO: combine "ready" and "go" sounds
         // TODO: make startup time configurable
-        self.set_timer(TimerEvent::Start, Instant::now(), 120);
+        self.set_timer(TimerEvent::Start, 120);
     }
 
     pub fn handle(&mut self, event: Event, time: Instant, player: &impl Player) {
         use {Event::*, GameState::*, InputEvent::*, TimerEvent::*};
+        self.time = time;
         match event {
             Input(PressLeft) => {
                 if self.state == Running && self.try_move((-1, 0)) {
@@ -261,7 +265,7 @@ impl Game {
                 self.started_left = Some(time);
                 self.clear_timer(DasRight);
                 self.clear_timer(Arr);
-                self.set_timer(DasLeft, time, self.config.das as u32);
+                self.set_timer(DasLeft, self.config.das as u32);
             }
             Input(PressRight) => {
                 if self.state == Running && self.try_move((1, 0)) {
@@ -271,7 +275,7 @@ impl Game {
                 self.started_right = Some(time);
                 self.clear_timer(DasLeft);
                 self.clear_timer(Arr);
-                self.set_timer(DasRight, time, self.config.das as u32);
+                self.set_timer(DasRight, self.config.das as u32);
             }
             Input(ReleaseLeft) => {
                 self.clear_timer(DasLeft);
@@ -282,6 +286,7 @@ impl Game {
                 } {
                     self.clear_timer(Arr);
                 }
+                self.started_left = None;
             }
             Input(ReleaseRight) => {
                 self.clear_timer(DasRight);
@@ -292,6 +297,7 @@ impl Game {
                 } {
                     self.clear_timer(Arr);
                 }
+                self.started_right = None;
             }
             Input(Hold) => {
                 if self.can_hold {
@@ -305,7 +311,7 @@ impl Game {
                     }
                 } else {
                     // TODO: add failed hold sound
-                    player.play("nohold");
+                    player.play("nohold").ok();
                 }
             }
             Input(Hard) | Timer(Lock | Extended | Timeout) => self.hard_drop(player),
@@ -328,11 +334,11 @@ impl Game {
             }
             Input(PressSoft) => {
                 self.clear_timer(Gravity);
-                self.set_timer(SoftDrop, time, self.config.soft_drop as u32);
+                self.set_timer(SoftDrop, self.config.soft_drop as u32);
             }
             Input(ReleaseSoft) => {
                 self.clear_timer(SoftDrop);
-                self.set_timer(Gravity, time, self.config.gravity as u32);
+                self.set_timer(Gravity, self.config.gravity as u32);
             }
             Input(Restart | Quit) => unreachable!("should be handled in outer event loop"),
             // Input(Undo | Redo) => {
@@ -340,24 +346,22 @@ impl Game {
             //     // also roll back the current time
             //     unreachable!("should be handled in outer event loop")
             // }
-            Timer(DasLeft) => {
-                // TODO: add das sound effect
-                todo!()
-            }
-            Timer(DasRight) => {
-                // TODO: add das sound effect
-                todo!()
-            }
+
+            // TODO: add das sound effect
+            Timer(DasLeft) => self.handle_das(),
+            Timer(DasRight) => self.handle_das(),
             Timer(Arr) => {
                 todo!()
             }
+            Timer(Are) => {
+                todo!()
+            }
         };
-        self.last_update = Some(time);
         // TODO: set lock timers if on the ground and they arent already set
     }
 
-    fn set_timer(&mut self, t: TimerEvent, time: Instant, frames: u32) {
-        let time = time + FRAME * frames;
+    fn set_timer(&mut self, t: TimerEvent, frames: u32) {
+        let time = self.time + FRAME * frames;
         let idx = self.timers.partition_point(|&(i, _)| i < time);
         self.timers.insert(idx, (time, t))
     }
@@ -431,11 +435,29 @@ impl Game {
         next
     }
 
-    fn handle_instant_das(&self) {
-        // TODO: check if started left or started right minus current time is more than das threshhold, if so find which is bigger and
-        // if self.config.arr = 0 {
-        //     while self.try_shift(self.last_dir) {}
-        // }
+    fn das_helper(&mut self, dir: i8) {
+        if self.config.arr == 0 {
+            while self.try_move((dir, 0)) {}
+        } else {
+            self.set_timer(TimerEvent::Arr, self.config.arr as u32)
+        }
+    }
+
+    fn handle_das(&mut self) {
+        let t = self.time;
+        let threshold = FRAME * self.config.das as u32;
+        match (self.started_left, self.started_right) {
+            (Some(l), Some(r)) => {
+                if r < l && t - l > threshold {
+                    self.das_helper(-1)
+                } else if l < r && t - r > FRAME * self.config.das as u32 {
+                    self.das_helper(1)
+                }
+            }
+            (None, Some(r)) if t - r > threshold => self.das_helper(1),
+            (Some(l), None) if t - l > threshold => self.das_helper(-1),
+            _ => return,
+        }
     }
 
     fn spawn(&mut self, next: Piece) -> bool {
@@ -458,7 +480,7 @@ impl Game {
         // TODO
         // self.set_timer(if self.soft_dropping { SoftDrop } else { Gravity });
         // self.set_timer(Timeout);
-        self.handle_instant_das();
+        self.handle_das();
         true
     }
 
@@ -482,7 +504,7 @@ impl Game {
             if self.check_valid(displaced) {
                 self.current.1 = (pos.0 + dx, pos.1 + dy);
                 self.current.2 = new_rot;
-                self.handle_instant_das();
+                self.handle_das();
                 return true;
             }
         }
