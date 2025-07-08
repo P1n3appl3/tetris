@@ -54,11 +54,13 @@ fn run_game(game: &mut Game, input: &EventLoop, player: &impl Player) -> bool {
     let done = loop {
         use mpsc::RecvTimeoutError::*;
         let now = Instant::now();
+        let redraw_timeout = now + Duration::from_millis(100);
         let deadline = game
             .timers
             .front()
             .map(|&(t, _)| t)
-            .unwrap_or(now + Duration::from_millis(100));
+            .unwrap_or(redraw_timeout)
+            .min(redraw_timeout);
         match input.events.recv_timeout(deadline - now) {
             Ok(InputEvent::Restart) => break true,
             Ok(InputEvent::Quit) => break false,
@@ -67,10 +69,13 @@ fn run_game(game: &mut Game, input: &EventLoop, player: &impl Player) -> bool {
                 game.handle(Event::Input(input_event), Instant::now(), player)
             }
             Err(Timeout) => {
-                if let Some((t, timer_event)) = game.timers.pop_front() {
-                    info!("{timer_event:?}");
-                    game.handle(Event::Timer(timer_event), Instant::now(), player);
-                    debug_assert!(t < Instant::now());
+                if let Some(&(t, timer_event)) = game.timers.front() {
+                    let now = Instant::now();
+                    if t < now {
+                        game.timers.pop_front();
+                        info!("{timer_event:?}");
+                        game.handle(Event::Timer(timer_event), Instant::now(), player);
+                    }
                 }
             }
             Err(Disconnected) => {
