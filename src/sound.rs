@@ -1,18 +1,10 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use rodio::{
-    source::Source, static_buffer::StaticSamplesBuffer, Decoder, OutputStream,
-    OutputStreamHandle,
+    Decoder, OutputStream, OutputStreamHandle, source::Source,
+    static_buffer::StaticSamplesBuffer,
 };
 
 use std::{collections::HashMap, fs::File, io::BufReader};
-
-pub trait Player {
-    // TODO: asyncify this to lazy-load sounds while playing
-    // TODO: handle url instead of just path, download to cache
-    fn add_sound(&mut self, name: &str, resource: &str) -> Result<()>;
-    fn set_volume(&mut self, level: f32);
-    fn play(&self, s: &str) -> Result<()>;
-}
 
 pub struct RodioPlayer {
     pub volume: f32,
@@ -29,7 +21,7 @@ impl RodioPlayer {
     }
 }
 
-impl Player for RodioPlayer {
+impl tetris::Sound for RodioPlayer {
     fn add_sound(&mut self, name: &str, filename: &str) -> Result<()> {
         let decoder = Decoder::new(BufReader::new(File::open(filename)?))?;
         let (channels, rate, samples) = (

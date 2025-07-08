@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use kdl::{KdlDocument, KdlNode, KdlValue};
 
-use crate::{sound::Player, Bindings, Config};
+use crate::{Bindings, Config, Sound};
 
 // TODO: make it an enum
 // TODO: add sounds:
@@ -13,7 +13,7 @@ use crate::{sound::Player, Bindings, Config};
 const SOUNDS: &[&str] =
     &["start", "move", "rotate", "spin", "lock", "line", "hold", "lose", "win"];
 
-pub fn load(raw: &str, player: &mut impl Player) -> Result<(Config, Bindings)> {
+pub fn load(raw: &str, player: &mut impl Sound) -> Result<(Config, Bindings)> {
     let doc: KdlDocument = raw.parse()?;
     let get_node = |name| {
         doc.get(name).and_then(KdlNode::children).context(format!("missing {name} node"))

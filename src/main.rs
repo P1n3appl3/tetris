@@ -1,5 +1,6 @@
 mod graphics;
 mod input;
+mod sound;
 
 use std::{
     fs::{self},
@@ -12,14 +13,10 @@ use std::{
 use clap::Parser;
 use graphics::RawMode;
 use input::EventLoop;
-use log::{debug, error};
+use log::{LevelFilter, debug, error};
 use rand::prelude::*;
 
-use tetris::{
-    Event, Game, GameState, InputEvent,
-    replay::Replay,
-    sound::{Player, RodioPlayer},
-};
+use tetris::{Event, Game, GameState, InputEvent, Sound, replay::Replay};
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -45,6 +42,9 @@ struct Args {
 
     /// where to output replays
     replay_dir: Option<PathBuf>,
+
+    #[arg(short, long, action = clap::ArgAction::Count)]
+    verbose: u8,
 }
 
 fn main() {
@@ -55,12 +55,14 @@ fn main() {
 
     let args = Args::parse();
     let log_file = args.log_file.as_deref().unwrap_or(Path::new("/tmp/tetris.log"));
-    ftail::Ftail::new().single_file(log_file, true, log::LevelFilter::Debug).init().ok();
+    let level =
+        LevelFilter::iter().nth(1 + args.verbose as usize).unwrap_or(LevelFilter::max());
+    ftail::Ftail::new().single_file(log_file, true, level).init().ok();
     log_panics::init();
     // todo: use dir-rs/dirs/xdg for config dir
     let settings_file = args.config.as_deref().unwrap_or(Path::new("assets/settings.kdl"));
     let settings = fs::read_to_string(settings_file).expect("Couldn't find settings file");
-    let mut player = RodioPlayer::new().expect("Failed to initialize audio engine");
+    let mut player = sound::RodioPlayer::new().expect("Failed to initialize audio engine");
     let (config, keys) =
         tetris::settings::load(&settings, &mut player).expect("Invalid settings file");
     let _mode = RawMode::enter();
@@ -71,7 +73,7 @@ fn main() {
     while run_game(&mut game, &input, &player) {}
 }
 
-fn run_game(game: &mut Game, input: &EventLoop, player: &impl Player) -> bool {
+fn run_game(game: &mut Game, input: &EventLoop, player: &impl Sound) -> bool {
     let (width, height) = get_size();
     if width < 40 || height < 22 {
         panic!("screen too small");
