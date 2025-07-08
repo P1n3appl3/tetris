@@ -28,7 +28,7 @@ config {
     das 6
     arr 0
     gravity 60
-    soft_drop 2
+    soft_drop 1
     ghost #true
     // these mirror the 3 jstris lock delays
     lock 30

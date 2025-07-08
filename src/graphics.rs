@@ -1,7 +1,7 @@
 use log::error;
 use tetris::{Cell, Game, GameState, Piece, Rotation};
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use termios::*;
 
 use std::{
@@ -90,14 +90,20 @@ pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
         )?;
     }
     let text_color = (255, 255, 255);
-    draw_text(
-        o,
-        (ox + 34, oy + 20),
-        text_color,
-        &(40 - game.lines as i32).max(0).to_string(),
-    )?;
+    if let Some(target) = game.target_lines {
+        draw_text(
+            o,
+            (ox + 34, oy + 20),
+            text_color,
+            &(target.saturating_sub(game.lines)).to_string(),
+        )?;
+    }
     let now = Instant::now();
-    let time = game.end_time.unwrap_or(now).duration_since(game.start_time.unwrap_or(now));
+    let time = match game.state {
+        GameState::Startup => Duration::ZERO,
+        GameState::Running => now.duration_since(game.start_time.unwrap_or(now)),
+        GameState::Done => game.time.duration_since(game.start_time.unwrap_or(now)),
+    };
     let mins = time.as_secs() / 60;
     let secs = time.as_secs() % 60;
     let decis = time.as_millis() % 1000 / 100;
@@ -203,7 +209,9 @@ impl RawMode {
         });
         match rx.recv_timeout(Duration::from_millis(500)) {
             Err(RecvTimeoutError::Timeout) => {
-                error!("feature detection took too long to respond, lets just assume your terminal supports the input protocol...");
+                error!(
+                    "feature detection took too long to respond, lets just assume your terminal supports the input protocol..."
+                );
             }
             Ok(false) => {
                 error!("Your terminal doesn't support the 'kitty input protocol'");

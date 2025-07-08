@@ -149,6 +149,7 @@ pub struct Game {
     pub current: (Piece, (i8, i8), Rotation),
     pub hold: Option<Piece>,
     pub lines: u16,
+    pub target_lines: Option<u16>,
     pub config: Config,
     pub timers: VecDeque<(Instant, TimerEvent)>,
     pub time: Instant,
@@ -184,7 +185,7 @@ impl Rotation {
 
 impl Piece {
     pub fn get_pos(self, r: Rotation, (x, y): (i8, i8)) -> Pos {
-        DATA[self as usize][r as usize].map(|(a, b)| (x + a, y - b))
+        PIECE_DATA[self as usize][r as usize].map(|(a, b)| (x + a, y - b))
     }
 
     fn get_your_kicks(self, rot: Rotation, dir: Spin) -> [(i8, i8); 5] {
@@ -223,6 +224,7 @@ impl Game {
             current: (Piece::I, (0, 0), Rotation::North),
             hold: None,
             lines: 0,
+            target_lines: Some(40),
             timers: Default::default(),
             started_right: None,
             started_left: None,
@@ -250,6 +252,7 @@ impl Game {
         player.play("start").ok();
         // TODO: combine "ready" and "go" sounds
         // TODO: make startup time configurable
+        self.timers.clear();
         self.set_timer(TimerEvent::Start);
     }
 
@@ -260,7 +263,6 @@ impl Game {
             Input(PressLeft) => {
                 if self.state == Running && self.try_move((-1, 0)) {
                     player.play("move").ok();
-                    self.clear_timer(Lock);
                 }
                 self.started_left = Some(time);
                 self.clear_timer(DasRight);
@@ -270,7 +272,6 @@ impl Game {
             Input(PressRight) => {
                 if self.state == Running && self.try_move((1, 0)) {
                     player.play("move").ok();
-                    self.clear_timer(Lock);
                 }
                 self.started_right = Some(time);
                 self.clear_timer(DasLeft);
@@ -280,30 +281,33 @@ impl Game {
             Input(ReleaseLeft) => {
                 self.clear_timer(DasLeft);
                 if match (self.started_left, self.started_right) {
-                    (None, _) => unreachable!("had to be holding left"),
+                    (None, _) => false, // only reachable by holding it down between games
                     (Some(_), None) => true,
                     (Some(l), Some(r)) => l > r,
                 } {
                     self.clear_timer(Arr);
                 }
                 self.started_left = None;
+                self.handle_das();
             }
             Input(ReleaseRight) => {
                 self.clear_timer(DasRight);
                 if match (self.started_left, self.started_right) {
-                    (_, None) => unreachable!("had to be holding left"),
+                    (_, None) => false, // only reachable by holding it down between games
                     (None, Some(_)) => true,
                     (Some(l), Some(r)) => l < r,
                 } {
                     self.clear_timer(Arr);
                 }
                 self.started_right = None;
+                self.handle_das();
             }
             Input(Hold) => {
                 if self.can_hold {
                     if !self.hold() {
                         player.play("lose").ok();
-                        self.state = GameState::Done;
+                        self.state = Done;
+                        self.end_time = Some(self.time);
                         self.timers.clear();
                     } else {
                         player.play("hold").ok();
@@ -315,28 +319,33 @@ impl Game {
                 }
             }
             Input(Hard) | Timer(Lock | Extended | Timeout) => self.hard_drop(player),
-            Timer(_t @ (SoftDrop | Gravity)) => {
-                self.try_drop();
-                // self.set_timer(t);
+            Timer(t @ (SoftDrop | Gravity)) => {
+                if self.state == Running {
+                    self.try_drop();
+                }
+                self.set_timer(t);
             }
             Timer(Start) => {
-                self.state = GameState::Running;
+                self.state = Running;
                 let next = self.pop_piece();
                 self.spawn(next);
                 self.start_time = Some(time);
             }
             Input(rot @ (Cw | Ccw | Flip)) => {
                 if self.try_rotate(rot.try_into().expect("should always be a rotation")) {
-                    self.clear_timer(Lock);
                     player.play("rotate").ok();
                 }
+                // confirmed: jstris resets it even if you don't successfully rotate
+                self.clear_timer(Lock);
                 self.clear_timer(Extended);
             }
             Input(PressSoft) => {
+                self.soft_dropping = true;
                 self.clear_timer(Gravity);
                 self.set_timer(SoftDrop);
             }
             Input(ReleaseSoft) => {
+                self.soft_dropping = false;
                 self.clear_timer(SoftDrop);
                 self.set_timer(Gravity);
             }
@@ -348,8 +357,11 @@ impl Game {
             // }
 
             // TODO: add das sound effect
-            Timer(DasLeft) => self.handle_das(),
-            Timer(DasRight) => self.handle_das(),
+            Timer(DasLeft | DasRight) => {
+                if self.state == Running {
+                    self.handle_das()
+                }
+            }
             Timer(Arr) => {
                 todo!()
             }
@@ -388,23 +400,25 @@ impl Game {
         let old_lines = self.lines;
         // TODO: redo with "piece placement result struct"
         if self.lock() {
-            match self.lines {
-                n if n == old_lines => {
-                    player.play("lock").ok();
-                }
-                0..40 => {
-                    player.play("line").ok();
-                }
-                40.. => {
-                    // TODO: maybe just play both at the same time?
-                    player.play("win").or_else(|_| player.play("lock")).ok();
-                    self.state = GameState::Done;
-                }
-            };
+            if self.lines == old_lines {
+                player.play("lock").ok();
+            } else if self.lines < self.target_lines.unwrap_or(u16::MAX) {
+                player.play("line").ok();
+            } else {
+                // TODO: maybe just play both at the same time?
+                player.play("win").or_else(|_| player.play("lock")).ok();
+                self.finish();
+            }
         } else {
             player.play("lose").ok();
-            self.state = GameState::Done;
+            self.finish();
         }
+    }
+
+    fn finish(&mut self) {
+        self.state = GameState::Done;
+        self.end_time = Some(self.time);
+        self.timers.clear();
     }
 
     fn fill_bag(&mut self) -> &mut Self {
@@ -490,14 +504,12 @@ impl Game {
         }
         self.current = (next, (3, 21), Rotation::North);
         self.try_drop();
-        // TODO
         self.set_timer(if self.soft_dropping {
             TimerEvent::SoftDrop
         } else {
             TimerEvent::Gravity
         });
         self.set_timer(TimerEvent::Timeout);
-        self.handle_das();
         true
     }
 
@@ -519,9 +531,16 @@ impl Game {
         for (dx, dy) in piece.get_your_kicks(rot, dir) {
             let displaced = new_pos.map(|(x, y)| (x + dx, y + dy));
             if self.check_valid(displaced) {
-                self.current.1 = (pos.0 + dx, pos.1 + dy);
-                self.current.2 = new_rot;
+                self.current = (self.current.0, (pos.0 + dx, pos.1 + dy), new_rot);
                 self.handle_das();
+                use TimerEvent::*;
+                if self.can_drop() {
+                    self.clear_timer(Lock);
+                    self.clear_timer(Extended);
+                } else {
+                    self.set_timer(Lock);
+                    self.set_timer(Extended);
+                }
                 return true;
             }
         }
@@ -531,14 +550,7 @@ impl Game {
     fn try_drop(&mut self) -> bool {
         self.try_move((0, -1))
             .then(|| {
-                use TimerEvent::*;
-                if self.can_drop() {
-                    self.clear_timer(Lock);
-                    self.clear_timer(Extended);
-                } else {
-                    self.set_timer(Lock);
-                    self.set_timer(Extended);
-                }
+                self.handle_das();
             })
             .is_some()
     }
@@ -553,6 +565,14 @@ impl Game {
         let pos = (x + dx, y + dy);
         if self.check_valid(piece.get_pos(rot, pos)) {
             self.current = (piece, pos, rot);
+            use TimerEvent::*;
+            self.clear_timer(Lock);
+            if self.can_drop() {
+                self.clear_timer(Extended);
+            } else {
+                self.set_timer(Lock);
+                self.set_timer(Extended);
+            }
             true
         } else {
             false
@@ -574,7 +594,7 @@ impl TryFrom<InputEvent> for Spin {
 }
 
 // ordered n, e, s, w
-const DATA: [[Pos; 4]; 7] = [
+const PIECE_DATA: [[Pos; 4]; 7] = [
     [
         [(0, 1), (1, 1), (2, 1), (3, 1)], // I
         [(2, 0), (2, 1), (2, 2), (2, 3)],

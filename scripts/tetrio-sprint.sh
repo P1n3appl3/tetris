@@ -20,7 +20,6 @@ sess="$RANDOM"
 
 while [[ "$pri" != "&after=" ]]; do
     pri="&after=$(xh "$page$pri" "X-Session-ID:$sess" |
-        tee /tmp/test.json |
         tee >(
             jq '.data.entries[] |
         (.results.stats.finaltime/1000,

@@ -5,6 +5,8 @@
 
 ## ui
 
+- background grid in light grey and black
+  - does ghost piece overlay or occlude?
 - headers for next piece queue and hold sections
 - block skins, try "[]" like in tgm
 - show lines remaining in sprint with background color
@@ -29,6 +31,7 @@
 - setups from <https://four.lol>
   - give valid bags
   - track percent success
+- cheese race
 
 ## visual references
 

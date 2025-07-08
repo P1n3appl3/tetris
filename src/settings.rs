@@ -51,6 +51,8 @@ pub fn load(raw: &str, player: &mut impl Player) -> Result<(Config, Bindings)> {
         if let Some(s) = sound_node.get_arg(sound).and_then(KdlValue::as_string) {
             if let Err(e) = player.add_sound(sound, s) {
                 log::error!("Failed to load sound {sound} from {s}: {e}");
+            } else {
+                log::info!("Loaded sound {sound} from {s}");
             }
         }
     }
