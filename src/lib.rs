@@ -250,7 +250,7 @@ impl Game {
         player.play("start").ok();
         // TODO: combine "ready" and "go" sounds
         // TODO: make startup time configurable
-        self.set_timer(TimerEvent::Start, 120);
+        self.set_timer(TimerEvent::Start);
     }
 
     pub fn handle(&mut self, event: Event, time: Instant, player: &impl Player) {
@@ -265,7 +265,7 @@ impl Game {
                 self.started_left = Some(time);
                 self.clear_timer(DasRight);
                 self.clear_timer(Arr);
-                self.set_timer(DasLeft, self.config.das as u32);
+                self.set_timer(DasLeft);
             }
             Input(PressRight) => {
                 if self.state == Running && self.try_move((1, 0)) {
@@ -275,7 +275,7 @@ impl Game {
                 self.started_right = Some(time);
                 self.clear_timer(DasLeft);
                 self.clear_timer(Arr);
-                self.set_timer(DasRight, self.config.das as u32);
+                self.set_timer(DasRight);
             }
             Input(ReleaseLeft) => {
                 self.clear_timer(DasLeft);
@@ -334,11 +334,11 @@ impl Game {
             }
             Input(PressSoft) => {
                 self.clear_timer(Gravity);
-                self.set_timer(SoftDrop, self.config.soft_drop as u32);
+                self.set_timer(SoftDrop);
             }
             Input(ReleaseSoft) => {
                 self.clear_timer(SoftDrop);
-                self.set_timer(Gravity, self.config.gravity as u32);
+                self.set_timer(Gravity);
             }
             Input(Restart | Quit) => unreachable!("should be handled in outer event loop"),
             // Input(Undo | Redo) => {
@@ -360,8 +360,21 @@ impl Game {
         // TODO: set lock timers if on the ground and they arent already set
     }
 
-    fn set_timer(&mut self, t: TimerEvent, frames: u32) {
-        let time = self.time + FRAME * frames;
+    fn set_timer(&mut self, t: TimerEvent) {
+        use TimerEvent::*;
+        let c = self.config;
+        let frames = match t {
+            DasLeft | DasRight => c.das,
+            Arr => c.arr,
+            SoftDrop => c.soft_drop,
+            Gravity => c.gravity,
+            Lock => c.lock_delay.0,
+            Extended => c.lock_delay.1,
+            Timeout => c.lock_delay.2,
+            Start => 120,
+            Are => todo!(),
+        };
+        let time = self.time + FRAME * frames as u32;
         let idx = self.timers.partition_point(|&(i, _)| i < time);
         self.timers.insert(idx, (time, t))
     }
@@ -439,7 +452,7 @@ impl Game {
         if self.config.arr == 0 {
             while self.try_move((dir, 0)) {}
         } else {
-            self.set_timer(TimerEvent::Arr, self.config.arr as u32)
+            self.set_timer(TimerEvent::Arr)
         }
     }
 
@@ -456,7 +469,7 @@ impl Game {
             }
             (None, Some(r)) if t - r > threshold => self.das_helper(1),
             (Some(l), None) if t - l > threshold => self.das_helper(-1),
-            _ => return,
+            _ => {}
         }
     }
 
@@ -478,8 +491,12 @@ impl Game {
         self.current = (next, (3, 21), Rotation::North);
         self.try_drop();
         // TODO
-        // self.set_timer(if self.soft_dropping { SoftDrop } else { Gravity });
-        // self.set_timer(Timeout);
+        self.set_timer(if self.soft_dropping {
+            TimerEvent::SoftDrop
+        } else {
+            TimerEvent::Gravity
+        });
+        self.set_timer(TimerEvent::Timeout);
         self.handle_das();
         true
     }
@@ -514,13 +531,14 @@ impl Game {
     fn try_drop(&mut self) -> bool {
         self.try_move((0, -1))
             .then(|| {
-                // if self.can_drop() {
-                //     self.clear_timer(Lock);
-                //     self.clear_timer(Extended);
-                // } else {
-                //     self.set_timer(Lock);
-                //     self.set_timer(Extended);
-                // }
+                use TimerEvent::*;
+                if self.can_drop() {
+                    self.clear_timer(Lock);
+                    self.clear_timer(Extended);
+                } else {
+                    self.set_timer(Lock);
+                    self.set_timer(Extended);
+                }
             })
             .is_some()
     }

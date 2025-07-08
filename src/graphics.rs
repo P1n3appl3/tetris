@@ -1,11 +1,11 @@
-use log::{error, info};
+use log::error;
 use tetris::{Cell, Game, GameState, Piece, Rotation};
 
 use anyhow::{anyhow, Result};
 use termios::*;
 
 use std::{
-    io::{self, BufRead, Read as _, StdoutLock, Write},
+    io::{self, Read as _, StdoutLock, Write},
     os::unix::prelude::AsRawFd,
     process::exit,
     sync::{
@@ -21,7 +21,7 @@ macro_rules! csi {
 }
 
 const BG_COLOR: (u8, u8, u8) = (20, 20, 20);
-const DONE_COLOR: (u8, u8, u8) = (106, 106, 106);
+// const DONE_COLOR: (u8, u8, u8) = (106, 106, 106);
 const LOST_COLOR: (u8, u8, u8) = (106, 106, 106); // TODO: differentiate from DONE
 
 trait Color {

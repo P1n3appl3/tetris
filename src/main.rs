@@ -2,7 +2,7 @@ mod graphics;
 mod input;
 
 use std::{
-    fs::{self, File},
+    fs::{self},
     path::Path,
     sync::mpsc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
