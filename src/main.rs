@@ -69,7 +69,9 @@ fn run_game(game: &mut Game, input: &EventLoop, player: &impl Player) -> bool {
                 game.handle(Event::Input(input_event), Instant::now(), player)
             }
             Err(Timeout) => {
-                if let Some(&(t, timer_event)) = game.timers.front() {
+                if game.state != GameState::Done
+                    && let Some(&(t, timer_event)) = game.timers.front()
+                {
                     let now = Instant::now();
                     if t < now {
                         game.timers.pop_front();
