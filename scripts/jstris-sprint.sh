@@ -4,7 +4,7 @@ user=$1
 lines="lines=${2-40}L"
 page="https://jstris.jezevec10.com/sprint?display=5&$lines&user=$user&page="
 
-f=$user-sprints-$(date -I).txt
+f=$user-jstris-sprints-$(date -I).txt
 rm -f "$f"
 
 # TODO: do you want to refetch? you already have data for that user from <mtime> ago
@@ -34,3 +34,5 @@ sort -k5 "$f" | column -t | sponge "$f"
 echo -e "\nrun:\n\ngnuplot -e \"filename='$f'\" sprints.gpi\n"
 echo -e "for pretty graphs. check scripts.gpi for some more options or try\n"
 echo -e "python chart-times.py $f"
+
+# can use https://jstris.jezevec10.com/replay/data?id=<replay_id>&type=0 for replay downloading

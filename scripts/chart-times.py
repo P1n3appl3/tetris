@@ -26,7 +26,7 @@ class Game:
             float(row[2]),
             int(row[3]),
             datetime.strptime(row[4], "%Y-%m-%dT%H:%M:%S"),
-            int(row[5]) if row[5] != "null" else 0,
+            row[5],
         )
 
 
