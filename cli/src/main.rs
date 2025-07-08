@@ -3,14 +3,15 @@ mod input;
 mod sound;
 
 use std::{
-    fs::{self},
+    fs,
     num::NonZeroU16,
     path::{Path, PathBuf},
     sync::mpsc,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use clap::Parser;
+use directories::ProjectDirs;
 use graphics::RawMode;
 use input::EventLoop;
 use log::{LevelFilter, debug, error};
@@ -22,27 +23,26 @@ use tetris::{Event, Game, GameState, InputEvent, Sound, replay::Replay};
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// set the number of lines
+    /// Set the number of lines
     #[arg(short, long)]
     lines: Option<NonZeroU16>,
 
-    /// enable practice mode (no line count)
+    /// Enable practice mode (no line count)
     #[arg(short, long)]
     practice: bool,
 
-    // /// cheese race mode
-    // #[arg(short, long)]
-    // cheese: bool,
-    /// path to settings file
+    /// Path to settings file
     config: Option<PathBuf>,
 
-    /// where to output logs (/tmp/tetris.log by default)
+    /// Where to output logs
     #[arg(short, long)]
     log_file: Option<PathBuf>,
 
-    /// where to output replays
+    /// Where to output replays
+    #[arg(short, long)]
     replay_dir: Option<PathBuf>,
 
+    /// Include more log output
     #[arg(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
 }
@@ -54,14 +54,30 @@ fn main() {
     // TODO: panic hook to exit raw mode first so backtraces actually print
 
     let args = Args::parse();
-    let log_file = args.log_file.as_deref().unwrap_or(Path::new("/tmp/tetris.log"));
+    let dirs = ProjectDirs::from("", "", "tetris").unwrap();
+    let log_file = args.log_file.unwrap_or_else(|| {
+        let d = dirs.data_dir();
+        fs::create_dir_all(d).ok();
+        d.join("log.txt")
+    });
     let level =
         LevelFilter::iter().nth(1 + args.verbose as usize).unwrap_or(LevelFilter::max());
-    ftail::Ftail::new().single_file(log_file, true, level).init().ok();
+    ftail::Ftail::new().single_file(&log_file, true, level).init().ok();
     log_panics::init();
-    // todo: use dir-rs/dirs/xdg for config dir
-    let settings_file = args.config.as_deref().unwrap_or(Path::new("assets/settings.kdl"));
-    let settings = fs::read_to_string(settings_file).expect("Couldn't find settings file");
+    let settings = if let Some(path) = args.config {
+        fs::read_to_string(path).expect("Couldn't read settings file")
+    } else {
+        let default_settings_content = include_str!("../settings.kdl");
+        fs::create_dir_all(dirs.config_dir()).ok();
+        let settings_path = dirs.config_dir().join("settings.kdl");
+        match fs::read_to_string(&settings_path) {
+            Ok(s) => s,
+            Err(_) => {
+                fs::write(settings_path, default_settings_content).ok();
+                default_settings_content.to_owned()
+            }
+        }
+    };
     let mut player = sound::RodioPlayer::new().expect("Failed to initialize audio engine");
     let (config, keys) =
         tetris::settings::load(&settings, &mut player).expect("Invalid settings file");
@@ -70,10 +86,20 @@ fn main() {
     let mut game = Game::new(config);
     game.target_lines =
         if args.practice { None } else { Some(args.lines.map(u16::from).unwrap_or(40)) };
-    while run_game(&mut game, &input, &player) {}
+    let replay_dir = args.replay_dir.unwrap_or_else(|| {
+        let d = dirs.data_dir().join("replays");
+        fs::create_dir_all(&d).ok();
+        d
+    });
+    while run_game(&mut game, &input, &player, &replay_dir) {}
 }
 
-fn run_game(game: &mut Game, input: &EventLoop, player: &impl Sound) -> bool {
+fn run_game(
+    game: &mut Game,
+    input: &EventLoop,
+    player: &impl Sound,
+    replay_dir: &Path,
+) -> bool {
     let (width, height) = get_size();
     if width < 40 || height < 22 {
         panic!("screen too small");
@@ -145,7 +171,7 @@ fn run_game(game: &mut Game, input: &EventLoop, player: &impl Sound) -> bool {
     {
         replay.length =
             (game.end_time.unwrap() - game.start_time.unwrap()).as_millis() as u32;
-        replay.save();
+        save_replay(&mut replay, replay_dir);
     }
     done
 }
@@ -154,4 +180,23 @@ fn get_size() -> (u16, u16) {
     let mut size = libc::winsize { ws_row: 0, ws_col: 0, ws_xpixel: 0, ws_ypixel: 0 };
     unsafe { libc::ioctl(1, libc::TIOCGWINSZ, &mut size) };
     (size.ws_col, size.ws_row)
+}
+
+fn save_replay(replay: &mut Replay, dir: &Path) {
+    let time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_secs();
+    let path = dir.join(format!("{time}.json"));
+    let raw_replay =
+        serde_json::to_string_pretty(replay).expect("Failed to serialize replay");
+    fs::write(&path, &raw_replay).expect("Failed to write replay");
+    log::info!("Replay saved to {path:?}");
+
+    // does it round-trip?
+    let raw_replay = fs::read_to_string(&path).expect("Failed to read replay");
+    let round_trip: Replay =
+        serde_json::from_str(&raw_replay).expect("Failed to deserialize replay");
+    replay.last = None;
+    debug_assert_eq!(*replay, round_trip);
 }

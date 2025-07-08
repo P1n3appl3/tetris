@@ -66,7 +66,7 @@
         strictDeps = true;
 
         nativeBuildInputs = lib.optionals pkgs.stdenv.isLinux (with pkgs; [
-          pkg-config makeWrapper alsa-lib
+          pkg-config makeWrapper alsa-lib openssl
         ]);
 
         buildInputs = with pkgs; [ libiconv ] ++
