@@ -45,13 +45,13 @@ config {
 
 sound {
     volume 0.3
-    ready "assets/sounds/ready.ogg"
-    go "assets/sounds/go.ogg"
-    move "assets/sounds/move.ogg"
+    ready #null
+    move "https://s.jezevec10.com/res/se0/move.wav"
     rotate #null
-    lock "assets/sounds/lock.ogg"
-    line "assets/sounds/line.ogg"
-    hold #null
-    lose "assets/sounds/topout.ogg"
-    win #null
+    lock "https://s.jezevec10.com/res/se0/lock.wav"
+    line "https://s.jezevec10.com/res/se0/linefall.wav"
+    hold "https://s.jezevec10.com/res/se0/hold.wav"
+    lose "https://s.jezevec10.com/res/se0/topout.wav"
+    // win "path/to/win.wav"
+    go #null
 }

@@ -1,4 +1,5 @@
 use anyhow::{Result, anyhow};
+use directories::ProjectDirs;
 use rodio::{
     Decoder, OutputStream, OutputStreamHandle, source::Source,
     static_buffer::StaticSamplesBuffer,
@@ -11,18 +12,36 @@ pub struct RodioPlayer {
     _stream: OutputStream,
     handle: OutputStreamHandle,
     sounds: HashMap<String, StaticSamplesBuffer<f32>>,
+    #[cfg(feature = "url-assets")]
+    cache: cached_path::Cache,
 }
 
 impl RodioPlayer {
-    pub fn new() -> Result<Self> {
+    pub fn new(dirs: &ProjectDirs) -> Result<Self> {
         let (_stream, handle) = OutputStream::try_default()?;
 
-        Ok(Self { _stream, handle, sounds: HashMap::new(), volume: 0.5 })
+        #[cfg(feature = "url-assets")]
+        let cache = cached_path::CacheBuilder::new()
+            .dir(dirs.cache_dir().to_path_buf())
+            .client_builder(reqwest::blocking::ClientBuilder::new().user_agent("tetris"))
+            .build()?;
+
+        Ok(Self {
+            _stream,
+            volume: 0.5,
+            handle,
+            sounds: HashMap::new(),
+            #[cfg(feature = "url-assets")]
+            cache,
+        })
     }
 }
 
 impl tetris::Sound for RodioPlayer {
     fn add_sound(&mut self, name: &str, filename: &str) -> Result<()> {
+        #[cfg(feature = "url-assets")]
+        let filename = self.cache.cached_path(filename)?;
+
         let decoder = Decoder::new(BufReader::new(File::open(filename)?))?;
         let (channels, rate, samples) = (
             decoder.channels(),

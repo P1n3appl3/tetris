@@ -10,7 +10,10 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-use clap::Parser;
+use clap::{
+    Parser,
+    builder::{Styles, styling::AnsiColor::*},
+};
 use directories::ProjectDirs;
 use graphics::RawMode;
 use input::EventLoop;
@@ -21,7 +24,7 @@ use tetris::{Event, Game, GameState, InputEvent, Sound, replay::Replay};
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(version, about, long_about = None, styles = STYLES)]
 struct Args {
     /// Set the number of lines
     #[arg(short, long)]
@@ -35,7 +38,7 @@ struct Args {
     config: Option<PathBuf>,
 
     /// Where to output logs
-    #[arg(short, long)]
+    #[arg(short = 'o', long)]
     log_file: Option<PathBuf>,
 
     /// Where to output replays
@@ -78,7 +81,8 @@ fn main() {
             }
         }
     };
-    let mut player = sound::RodioPlayer::new().expect("Failed to initialize audio engine");
+    let mut player =
+        sound::RodioPlayer::new(&dirs).expect("Failed to initialize audio engine");
     let (config, keys) =
         tetris::settings::load(&settings, &mut player).expect("Invalid settings file");
     let _mode = RawMode::enter();
@@ -176,6 +180,7 @@ fn run_game(
     done
 }
 
+// TODO: update on sigwinch
 fn get_size() -> (u16, u16) {
     let mut size = libc::winsize { ws_row: 0, ws_col: 0, ws_xpixel: 0, ws_ypixel: 0 };
     unsafe { libc::ioctl(1, libc::TIOCGWINSZ, &mut size) };
@@ -200,3 +205,6 @@ fn save_replay(replay: &mut Replay, dir: &Path) {
     replay.last = None;
     debug_assert_eq!(*replay, round_trip);
 }
+
+const STYLES: Styles =
+    Styles::styled().literal(Cyan.on_default().bold()).placeholder(Blue.on_default());

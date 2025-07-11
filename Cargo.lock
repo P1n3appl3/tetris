@@ -412,6 +412,7 @@ dependencies = [
  "log",
  "log-panics",
  "rand 0.9.1",
+ "reqwest",
  "rodio",
  "serde_json",
  "termios",

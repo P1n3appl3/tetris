@@ -93,7 +93,10 @@
       #   text = ./jstris-sprint.sh;
       # };
 
-      jstrisScriptDeps = with pkgs; [ xh pup jq bc sd choose moreutils gnuplot ];
+      jstrisScriptDeps = with pkgs; [
+        xh pup jq bc sd choose moreutils gnuplot
+        (python3.withPackages (pp: with pp;[matplotlib]))
+      ];
 
     in {
       packages.default = tetris;
