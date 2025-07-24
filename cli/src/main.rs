@@ -11,16 +11,16 @@ use std::{
 };
 
 use clap::{
+    builder::{styling::AnsiColor::*, Styles},
     Parser,
-    builder::{Styles, styling::AnsiColor::*},
 };
 use directories::ProjectDirs;
 use graphics::RawMode;
 use input::EventLoop;
-use log::{LevelFilter, debug, error};
+use log::{debug, error, LevelFilter};
 use rand::prelude::*;
 
-use tetris::{Event, Game, GameState, InputEvent, Sound, replay::Replay};
+use tetris::{replay::Replay, Event, Game, GameState, InputEvent, Sound};
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -63,9 +63,13 @@ fn main() {
         fs::create_dir_all(d).ok();
         d.join("log.txt")
     });
-    let level =
-        LevelFilter::iter().nth(1 + args.verbose as usize).unwrap_or(LevelFilter::max());
-    ftail::Ftail::new().single_file(&log_file, true, level).init().ok();
+    let level = LevelFilter::iter()
+        .nth(1 + args.verbose as usize)
+        .unwrap_or(LevelFilter::max());
+    ftail::Ftail::new()
+        .single_file(&log_file, true, level)
+        .init()
+        .ok();
     log_panics::init();
     let settings = if let Some(path) = args.config {
         fs::read_to_string(path).expect("Couldn't read settings file")
@@ -81,15 +85,17 @@ fn main() {
             }
         }
     };
-    let mut player =
-        sound::RodioPlayer::new(&dirs).expect("Failed to initialize audio engine");
+    let mut player = sound::RodioPlayer::new(&dirs).expect("Failed to initialize audio engine");
     let (config, keys) =
         tetris::settings::load(&settings, &mut player).expect("Invalid settings file");
     let _mode = RawMode::enter();
     let input = EventLoop::start(keys);
     let mut game = Game::new(config);
-    game.target_lines =
-        if args.practice { None } else { Some(args.lines.map(u16::from).unwrap_or(40)) };
+    game.target_lines = if args.practice {
+        None
+    } else {
+        Some(args.lines.map(u16::from).unwrap_or(40))
+    };
     let replay_dir = args.replay_dir.unwrap_or_else(|| {
         let d = dirs.data_dir().join("replays");
         fs::create_dir_all(&d).ok();
@@ -98,12 +104,34 @@ fn main() {
     while run_game(&mut game, &input, &player, &replay_dir) {}
 }
 
-fn run_game(
-    game: &mut Game,
-    input: &EventLoop,
-    player: &impl Sound,
-    replay_dir: &Path,
-) -> bool {
+// plan for how to integrate tetrizz search algorithm
+//
+// 1. call the algorithm once per placement
+//      a. for now i'll probably just do this in the same thread and ignore the delays that it
+//      introduces, but long term i'll want to background this and redraw the current state of the
+//      search results as they update
+// 2. apply some manual rule to filter through the options (e.g. only show z spins)
+//      a. ideally this should be applied in the search algorithm itself to focus the beam search
+//      b. or we might move away from beam search as an approach
+// 3. display the options, either rendered in the UI or printed to the log
+
+fn run_game(game: &mut Game, input: &EventLoop, player: &impl Sound, replay_dir: &Path) -> bool {
+    let eval = &tetrizz::eval::Eval::new(
+        -79.400375,
+        -55.564907,
+        -125.680145,
+        -170.41902,
+        10.167948,
+        -172.78625,
+        -478.7291,
+        86.84883,
+        368.89203,
+        272.57874,
+        28.938646,
+        -104.59018,
+        -496.8832,
+        458.29822,
+    );
     let (width, height) = get_size();
     if width < 40 || height < 22 {
         panic!("screen too small");
@@ -115,14 +143,54 @@ fn run_game(
     replay.start();
 
     graphics::draw(width as i16, height as i16, game).unwrap();
+    let mut new_piece = false;
 
     let done = loop {
+        if new_piece {
+            // call search algorithm
+            log::info!("upcoming: {:?}", game.upcomming);
+            log::info!("hold: {:?}", game.hold);
+            log::info!("current: {:?}", game.current);
+            let (tetrizz_game, queue) = game.as_tetrizz_game_and_queue();
+            log::info!("queue: {:?}", queue);
+            log::info!("hold: {:?}", tetrizz_game.hold);
+            let search_loc = tetrizz::movegen::movegen(&tetrizz_game, queue[0]);
+            let heap = tetrizz::beam_search::search_results(
+                &tetrizz_game,
+                &search_loc,
+                queue,
+                &eval,
+                7,
+                3000,
+            );
+            let mut spins = vec![];
+            for node in heap.iter() {
+                for (m, placement_info) in node.moves.iter() {
+                    if m.piece == tetrizz::data::Piece::I
+                        && m.rotation == tetrizz::data::Rotation::East
+                    {
+                        spins.push(node.clone());
+                    }
+                    if placement_info.lines_cleared > 0 {
+                        break;
+                    }
+                    // if placement_info.lines_cleared > 0 {
+                    //     if m.spun {
+                    //         spins.push(node.clone());
+                    //     }
+                    //     break;
+                    // }
+                }
+            }
+            spins.sort_by_key(|s| s.score);
+            game.spins = spins;
+            new_piece = false;
+        }
+        use mpsc::RecvTimeoutError::*;
         use GameState::*;
         use InputEvent::*;
-        use mpsc::RecvTimeoutError::*;
         let now = Instant::now();
-        let redraw_timeout =
-            Duration::from_millis(if game.state == Done { 10000 } else { 100 });
+        let redraw_timeout = Duration::from_millis(if game.state == Done { 10000 } else { 100 });
         let deadline = game
             .timers
             .front()
@@ -143,7 +211,7 @@ fn run_game(
                     debug!(target: "input", "{input_event:?}");
                     let t = Instant::now();
                     replay.push(input_event, t);
-                    game.handle(Event::Input(input_event), t, player);
+                    new_piece |= game.handle(Event::Input(input_event), t, player)
                 }
             }
             Err(Timeout) => {
@@ -154,7 +222,7 @@ fn run_game(
                     if t < now {
                         game.timers.pop_front();
                         debug!(target: "timer","{timer_event:?}");
-                        game.handle(Event::Timer(timer_event), Instant::now(), player);
+                        new_piece |= game.handle(Event::Timer(timer_event), Instant::now(), player);
                     }
                 }
             }
@@ -173,8 +241,7 @@ fn run_game(
         && let Some(target) = game.target_lines
         && game.lines >= target
     {
-        replay.length =
-            (game.end_time.unwrap() - game.start_time.unwrap()).as_millis() as u32;
+        replay.length = (game.end_time.unwrap() - game.start_time.unwrap()).as_millis() as u32;
         save_replay(&mut replay, replay_dir);
     }
     done
@@ -182,7 +249,12 @@ fn run_game(
 
 // TODO: update on sigwinch
 fn get_size() -> (u16, u16) {
-    let mut size = libc::winsize { ws_row: 0, ws_col: 0, ws_xpixel: 0, ws_ypixel: 0 };
+    let mut size = libc::winsize {
+        ws_row: 0,
+        ws_col: 0,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
     unsafe { libc::ioctl(1, libc::TIOCGWINSZ, &mut size) };
     (size.ws_col, size.ws_row)
 }
@@ -193,8 +265,7 @@ fn save_replay(replay: &mut Replay, dir: &Path) {
         .expect("time went backwards")
         .as_secs();
     let path = dir.join(format!("{time}.json"));
-    let raw_replay =
-        serde_json::to_string_pretty(replay).expect("Failed to serialize replay");
+    let raw_replay = serde_json::to_string_pretty(replay).expect("Failed to serialize replay");
     fs::write(&path, &raw_replay).expect("Failed to write replay");
     log::info!("Replay saved to {path:?}");
 
@@ -206,5 +277,6 @@ fn save_replay(replay: &mut Replay, dir: &Path) {
     debug_assert_eq!(*replay, round_trip);
 }
 
-const STYLES: Styles =
-    Styles::styled().literal(Cyan.on_default().bold()).placeholder(Blue.on_default());
+const STYLES: Styles = Styles::styled()
+    .literal(Cyan.on_default().bold())
+    .placeholder(Blue.on_default());

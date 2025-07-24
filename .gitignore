@@ -3,5 +3,9 @@ replays
 **/*.txt
 **/*.games
 
+tags
+tags.temp
+tags.lock
+
 .direnv
 result

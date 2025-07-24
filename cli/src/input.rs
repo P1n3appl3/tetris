@@ -49,6 +49,16 @@ impl EventLoop {
                 (('r', 0, true), Restart),
                 (('q', 0, true), Quit),
                 (('c', CTRL, true), Quit),
+                (('1', 0, true), ShowSolution(1)),
+                (('2', 0, true), ShowSolution(2)),
+                (('3', 0, true), ShowSolution(3)),
+                (('4', 0, true), ShowSolution(4)),
+                (('5', 0, true), ShowSolution(5)),
+                (('6', 0, true), ShowSolution(6)),
+                (('7', 0, true), ShowSolution(7)),
+                (('8', 0, true), ShowSolution(8)),
+                (('9', 0, true), ShowSolution(9)),
+                (('0', 0, true), ShowSolution(0)),
                 // (('u', 0, true), Undo),
                 // (('r', CTRL, true), Redo),
             ]
@@ -94,7 +104,11 @@ fn parse_kitty_key(buf: &[u8]) -> Result<KeyEvent> {
     let s = str::from_utf8(&buf[2..buf.len() - 1]).unwrap();
     let parts: Vec<Vec<u32>> = s
         .split(';')
-        .map(|s| s.split(':').map(|s| s.parse().unwrap_or_default()).collect())
+        .map(|s| {
+            s.split(':')
+                .map(|s| s.parse().unwrap_or_default())
+                .collect()
+        })
         .collect();
     let code = if trailer == b'u' {
         char::from_u32(parts[0][0]).unwrap()
@@ -111,5 +125,9 @@ fn parse_kitty_key(buf: &[u8]) -> Result<KeyEvent> {
     } else {
         (0, true)
     };
-    Ok(KeyEvent { key: code, mods: mods as u8, press })
+    Ok(KeyEvent {
+        key: code,
+        mods: mods as u8,
+        press,
+    })
 }

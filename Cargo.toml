@@ -6,6 +6,8 @@ default-members = ["cli"]
 anyhow = "1"
 log = "0.4"
 rand = "0.9"
+tetrizz = { version = "0.1.0", git = "https://github.com/yaahc/tetrizz.git" }
+# tetrizz = { version = "0.1.0", path = "../../Tyrcnex/tetrizz" }
 
 [package]
 name = "tetris"
@@ -19,3 +21,4 @@ serde = { version = "1", features = ["derive"] }
 log.workspace = true
 anyhow.workspace = true
 rand.workspace = true
+tetrizz.workspace = true

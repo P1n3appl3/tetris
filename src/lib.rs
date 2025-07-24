@@ -12,6 +12,64 @@ pub use game::Game;
 
 pub type Pos = [(i8, i8); 4];
 
+#[derive(Debug, Clone, Copy)]
+pub struct PieceLocation {
+    pub piece: Piece,
+    pub pos: (i8, i8),
+    pub rot: Rotation,
+}
+
+macro_rules! lutify {
+    (($e:expr) for $v:ident in [$($val:expr),*]) => {
+        [
+            $(
+                {
+                    let $v = $val;
+                    $e
+                }
+            ),*
+        ]
+    };
+}
+
+macro_rules! piece_lut {
+    ($v:ident => $e:expr) => {
+        lutify!(($e) for $v in [Piece::I, Piece::J, Piece::L, Piece::O, Piece::S, Piece::T, Piece::Z])
+    };
+}
+
+macro_rules! rotation_lut {
+    ($v:ident => $e:expr) => {
+        lutify!(($e) for $v in [Rotation::North, Rotation::East, Rotation::South, Rotation::West])
+    };
+}
+
+impl PieceLocation {
+    pub const fn blocks(&self) -> [(i8, i8); 4] {
+        const LUT: [[[(i8, i8); 4]; 4]; 7] =
+            piece_lut!(piece => rotation_lut!(rotation => rotation.rotate_blocks(piece.blocks())));
+        self.translate_blocks(LUT[self.piece as usize][self.rot as usize])
+        // self.translate_blocks(self.rotation.rotate_blocks(self.piece.blocks()))
+    }
+
+    const fn translate(&self, (x, y): (i8, i8)) -> (i8, i8) {
+        (x + self.pos.0, y + self.pos.1)
+    }
+
+    const fn translate_blocks(&self, cells: [(i8, i8); 4]) -> [(i8, i8); 4] {
+        [
+            self.translate(cells[0]),
+            self.translate(cells[1]),
+            self.translate(cells[2]),
+            self.translate(cells[3]),
+        ]
+    }
+
+    pub fn new(piece: Piece, pos: (i8, i8), rot: Rotation) -> Self {
+        Self { piece, rot, pos }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum Piece {
@@ -22,6 +80,34 @@ pub enum Piece {
     S,
     T,
     Z,
+}
+
+impl Piece {
+    pub const fn blocks(&self) -> [(i8, i8); 4] {
+        match self {
+            Piece::Z => [(-1, 1), (0, 1), (0, 0), (1, 0)],
+            Piece::S => [(-1, 0), (0, 0), (0, 1), (1, 1)],
+            Piece::I => [(-1, 0), (0, 0), (1, 0), (2, 0)],
+            Piece::O => [(0, 0), (1, 0), (0, 1), (1, 1)],
+            Piece::J => [(-1, 0), (0, 0), (1, 0), (-1, 1)],
+            Piece::L => [(-1, 0), (0, 0), (1, 0), (1, 1)],
+            Piece::T => [(-1, 0), (0, 0), (1, 0), (0, 1)],
+        }
+    }
+}
+
+impl From<Piece> for tetrizz::data::Piece {
+    fn from(value: Piece) -> Self {
+        match value {
+            Piece::I => tetrizz::data::Piece::I,
+            Piece::J => tetrizz::data::Piece::J,
+            Piece::L => tetrizz::data::Piece::L,
+            Piece::O => tetrizz::data::Piece::O,
+            Piece::S => tetrizz::data::Piece::S,
+            Piece::T => tetrizz::data::Piece::T,
+            Piece::Z => tetrizz::data::Piece::Z,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,6 +127,37 @@ pub enum Rotation {
     West,
 }
 
+impl Rotation {
+    pub const fn rotate_block(&self, (x, y): (i8, i8)) -> (i8, i8) {
+        match self {
+            Rotation::North => (x, y),
+            Rotation::East => (y, -x),
+            Rotation::South => (-x, -y),
+            Rotation::West => (-y, x),
+        }
+    }
+
+    pub const fn rotate_blocks(&self, blocks: [(i8, i8); 4]) -> [(i8, i8); 4] {
+        [
+            self.rotate_block(blocks[0]),
+            self.rotate_block(blocks[1]),
+            self.rotate_block(blocks[2]),
+            self.rotate_block(blocks[3]),
+        ]
+    }
+}
+
+impl From<tetrizz::data::Rotation> for Rotation {
+    fn from(value: tetrizz::data::Rotation) -> Self {
+        match value {
+            tetrizz::data::Rotation::North => Rotation::North,
+            tetrizz::data::Rotation::East => Rotation::East,
+            tetrizz::data::Rotation::South => Rotation::South,
+            tetrizz::data::Rotation::West => Rotation::West,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InputEvent {
     PressLeft,
@@ -57,6 +174,7 @@ pub enum InputEvent {
     // maybe pull these out along with Garbage/Pause/StartSound to a "misc" event
     Restart,
     Quit,
+    ShowSolution(u8),
     // Undo,
     // Redo,
     // Garbage(n) // just for garbage line timer, need special handling to displace current piece upwards
@@ -161,9 +279,9 @@ impl Rotation {
 }
 
 impl Piece {
-    pub fn get_pos(self, r: Rotation, (x, y): (i8, i8)) -> Pos {
-        PIECE_DATA[self as usize][r as usize].map(|(a, b)| (x + a, y - b))
-    }
+    // pub fn get_pos(self, r: Rotation, (x, y): (i8, i8)) -> Pos {
+    //     PIECE_DATA[self as usize][r as usize].map(|(a, b)| (x + a, y - b))
+    // }
 
     fn get_your_kicks(self, rot: Rotation, dir: Spin) -> [(i8, i8); 5] {
         let next_rot = rot.rotate(dir);
@@ -211,52 +329,6 @@ impl TryFrom<InputEvent> for Spin {
         })
     }
 }
-
-// ordered n, e, s, w
-const PIECE_DATA: [[Pos; 4]; 7] = [
-    [
-        [(0, 1), (1, 1), (2, 1), (3, 1)], // I
-        [(2, 0), (2, 1), (2, 2), (2, 3)],
-        [(0, 2), (1, 2), (2, 2), (3, 2)],
-        [(1, 0), (1, 1), (1, 2), (1, 3)],
-    ],
-    [
-        [(0, 0), (0, 1), (1, 1), (2, 1)], // J
-        [(1, 0), (2, 0), (1, 1), (1, 2)],
-        [(0, 1), (1, 1), (2, 1), (2, 2)],
-        [(1, 0), (1, 1), (0, 2), (1, 2)],
-    ],
-    [
-        [(2, 0), (0, 1), (1, 1), (2, 1)], // L
-        [(1, 0), (1, 1), (1, 2), (2, 2)],
-        [(0, 1), (1, 1), (2, 1), (0, 2)],
-        [(0, 0), (1, 0), (1, 1), (1, 2)],
-    ],
-    [
-        [(1, 0), (2, 0), (1, 1), (2, 1)], // O
-        [(1, 0), (2, 0), (1, 1), (2, 1)],
-        [(1, 0), (2, 0), (1, 1), (2, 1)],
-        [(1, 0), (2, 0), (1, 1), (2, 1)],
-    ],
-    [
-        [(1, 0), (2, 0), (0, 1), (1, 1)], // S
-        [(1, 0), (1, 1), (2, 1), (2, 2)],
-        [(1, 1), (2, 1), (0, 2), (1, 2)],
-        [(0, 0), (0, 1), (1, 1), (1, 2)],
-    ],
-    [
-        [(1, 0), (0, 1), (1, 1), (2, 1)], // T
-        [(1, 0), (1, 1), (2, 1), (1, 2)],
-        [(0, 1), (1, 1), (2, 1), (1, 2)],
-        [(1, 0), (0, 1), (1, 1), (1, 2)],
-    ],
-    [
-        [(0, 0), (1, 0), (1, 1), (2, 1)], // Z
-        [(2, 0), (1, 1), (2, 1), (1, 2)],
-        [(0, 1), (1, 1), (1, 2), (2, 2)],
-        [(1, 0), (0, 1), (1, 1), (0, 2)],
-    ],
-];
 
 const ROTI: [[(i8, i8); 5]; 12] = [
     [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)], // n -> e

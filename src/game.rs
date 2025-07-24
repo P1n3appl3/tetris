@@ -1,12 +1,14 @@
 use std::{collections::VecDeque, time::Instant};
 
+use tetrizz::beam_search::Node;
+
 use crate::*;
 
 #[derive(Clone)]
 pub struct Game {
     pub board: [[Cell; 10]; 50], // hope no one stacks higher than this 👀
     pub upcomming: VecDeque<Piece>,
-    pub current: (Piece, (i8, i8), Rotation),
+    pub current: PieceLocation,
     pub hold: Option<Piece>,
     pub lines: u16,
     pub target_lines: Option<u16>,
@@ -21,6 +23,36 @@ pub struct Game {
     pub can_hold: bool,
     pub state: GameState,
     pub rng: StdRng,
+    pub spins: Vec<Node>,
+    pub solution: Option<(Node, Box<Game>)>,
+}
+
+impl Game {
+    pub fn as_tetrizz_game_and_queue(&self) -> (tetrizz::data::Game, Vec<tetrizz::data::Piece>) {
+        let mut queue: Vec<_> = std::iter::once(self.current.piece.into())
+            .chain(self.upcomming.iter().cloned().map(Into::into))
+            .collect();
+        let game = tetrizz::data::Game {
+            board: self.as_tetrizz_board(),
+            hold: self.hold.map(Into::into).unwrap_or_else(|| queue.remove(0)),
+            b2b: 0,
+            b2b_deficit: 0,
+        };
+        (game, queue)
+    }
+    fn as_tetrizz_board(&self) -> tetrizz::data::Board {
+        let mut board = tetrizz::data::Board {
+            cols: [tetrizz::data::Column(0); 10],
+        };
+        for column in 0..10 {
+            for row in 0..50 {
+                if self.board[row][column] != Cell::Empty {
+                    board.cols[column].0 |= 1 << row;
+                }
+            }
+        }
+        board
+    }
 }
 
 impl Game {
@@ -30,7 +62,7 @@ impl Game {
             rng: StdRng::from_os_rng(),
             board: [[Cell::Empty; 10]; 50],
             upcomming: Default::default(),
-            current: (Piece::I, (0, 0), Rotation::North),
+            current: PieceLocation::new(Piece::I, (0, 0), Rotation::North),
             hold: None,
             lines: 0,
             target_lines: Some(40),
@@ -43,6 +75,8 @@ impl Game {
             soft_dropping: false,
             can_hold: true,
             state: GameState::Done,
+            spins: Default::default(),
+            solution: None,
         }
     }
 
@@ -65,7 +99,7 @@ impl Game {
         self.set_timer(TimerEvent::Start);
     }
 
-    pub fn handle(&mut self, event: Event, time: Instant, player: &impl Sound) {
+    pub fn handle(&mut self, event: Event, time: Instant, player: &impl Sound) -> bool {
         use {Event::*, GameState::*, InputEvent::*, TimerEvent::*};
         self.time = time;
         match event {
@@ -120,14 +154,17 @@ impl Game {
                         self.timers.clear();
                     } else {
                         player.play("hold").ok();
-                        self.can_hold = false;
+                        // self.can_hold = false;
                     }
                 } else {
                     // TODO: add failed hold sound
                     player.play("nohold").ok();
                 }
             }
-            Input(Hard) | Timer(Lock | Extended | Timeout) => self.hard_drop(player),
+            Input(Hard) | Timer(Lock | Extended | Timeout) => {
+                self.hard_drop(player);
+                return true;
+            }
             Timer(t @ (SoftDrop | Gravity)) => {
                 if self.state == Running {
                     self.try_drop();
@@ -166,6 +203,27 @@ impl Game {
             // }
 
             // TODO: add das sound effect
+            Input(ShowSolution(ind)) => match ind {
+                0 => {
+                    self.solution = None;
+                }
+                ind => {
+                    let suggestion = &self.spins[ind as usize - 1];
+                    let mut game = self.clone();
+                    game.config.ghost = false;
+                    for (m, _) in &suggestion.moves {
+                        log::info!(
+                            "{:?} x:{} y:{} {:?} spin:{}",
+                            m.piece,
+                            m.x,
+                            m.y,
+                            m.rotation,
+                            m.spun
+                        );
+                    }
+                    self.solution = Some((suggestion.clone(), Box::new(game)));
+                }
+            },
             Timer(DasLeft | DasRight) => {
                 if self.state == Running {
                     self.handle_das()
@@ -179,6 +237,7 @@ impl Game {
             }
         };
         // TODO: set lock timers if on the ground and they arent already set
+        false
     }
 
     fn set_timer(&mut self, t: TimerEvent) {
@@ -246,10 +305,11 @@ impl Game {
         })
     }
 
-    fn lock(&mut self) -> bool {
-        let (p, pos, rot) = self.current;
-        for (x, y) in p.get_pos(rot, pos) {
-            self.board[y as usize][x as usize] = Cell::Piece(p);
+    pub fn lock(&mut self) -> bool {
+        log::info!("pos: {:?}", self.current.pos);
+        for (x, y) in self.current.blocks() {
+            log::info!("{} {}", x, y);
+            self.board[y as usize][x as usize] = Cell::Piece(self.current.piece);
         }
         for i in (0..23).rev() {
             if self.board[i].iter().all(|c| matches!(c, Cell::Piece(_))) {
@@ -306,12 +366,13 @@ impl Game {
             self.clear_timer(Timeout);
         }
         self.can_hold = true;
-        let pos = (3, 21);
-        let rot = Rotation::North;
-        if !self.check_valid(next.get_pos(rot, pos)) {
+        let pos = (4, 21);
+        let rotation = Rotation::North;
+        let next = PieceLocation::new(next, pos, rotation);
+        if !self.check_valid(next.blocks()) {
             return false;
         }
-        self.current = (next, (3, 21), Rotation::North);
+        self.current = next;
         self.try_drop();
         self.set_timer(if self.soft_dropping {
             TimerEvent::SoftDrop
@@ -322,25 +383,27 @@ impl Game {
         true
     }
 
-    fn hold(&mut self) -> bool {
+    pub fn hold(&mut self) -> bool {
         let piece = if let Some(p) = self.hold {
-            self.hold = Some(self.current.0);
+            self.hold = Some(self.current.piece);
             p
         } else {
-            self.hold = Some(self.current.0);
+            self.hold = Some(self.current.piece);
             self.pop_piece()
         };
         self.spawn(piece)
     }
 
     fn try_rotate(&mut self, dir: Spin) -> bool {
-        let (piece, pos, rot) = self.current;
+        let PieceLocation { piece, pos, rot } = self.current;
         let new_rot = rot.rotate(dir);
-        let new_pos = piece.get_pos(new_rot, pos);
+        let new_current = PieceLocation::new(piece, pos, new_rot);
+        let new_pos = new_current.blocks();
         for (dx, dy) in piece.get_your_kicks(rot, dir) {
             let displaced = new_pos.map(|(x, y)| (x + dx, y + dy));
             if self.check_valid(displaced) {
-                self.current = (self.current.0, (pos.0 + dx, pos.1 + dy), new_rot);
+                self.current =
+                    PieceLocation::new(self.current.piece, (pos.0 + dx, pos.1 + dy), new_rot);
                 self.handle_das();
                 use TimerEvent::*;
                 if self.can_drop() {
@@ -365,15 +428,16 @@ impl Game {
     }
 
     fn can_drop(&self) -> bool {
-        let (piece, pos, rot) = self.current;
-        self.check_valid(piece.get_pos(rot, pos).map(|(x, y)| (x, y - 1)))
+        self.check_valid(self.current.blocks().map(|(x, y)| (x, y - 1)))
     }
 
     fn try_move(&mut self, (dx, dy): (i8, i8)) -> bool {
-        let (piece, (x, y), rot) = self.current;
-        let pos = (x + dx, y + dy);
-        if self.check_valid(piece.get_pos(rot, pos)) {
-            self.current = (piece, pos, rot);
+        let mut next_current = self.current.clone();
+        next_current.pos.0 += dx;
+        next_current.pos.1 += dy;
+
+        if self.check_valid(next_current.blocks()) {
+            self.current = next_current;
             use TimerEvent::*;
             self.clear_timer(Lock);
             if self.can_drop() {

@@ -21,6 +21,7 @@ tetris = { path = ".." }
 log.workspace = true
 anyhow.workspace = true
 rand.workspace = true
+tetrizz.workspace = true
 
 [features]
 default = ["url-assets"]
