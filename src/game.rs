@@ -306,12 +306,12 @@ impl Game {
             self.clear_timer(Timeout);
         }
         self.can_hold = true;
-        let pos = (3, 21);
+        let pos = (5, 21);
         let rot = Rotation::North;
         if !self.check_valid(next.get_pos(rot, pos)) {
             return false;
         }
-        self.current = (next, (3, 21), Rotation::North);
+        self.current = (next, (5, 21), Rotation::North);
         self.try_drop();
         self.set_timer(if self.soft_dropping {
             TimerEvent::SoftDrop

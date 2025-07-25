@@ -80,13 +80,13 @@ pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
     let (ox, oy) = (width / 2 - 19, height / 2 - 11);
     draw_board(o, game, (ox + 10, oy))?;
     if let Some(hold) = game.hold {
-        draw_piece(o, hold, (ox, oy + 2))?;
+        draw_piece(o, hold, (ox, oy + 4))?;
     }
     for i in 0..5 {
         draw_piece(
             o,
             *game.upcomming.get(i).ok_or(anyhow!("piece queue empty"))?,
-            (ox + 32, oy + 2 + 3 * i as i16),
+            (ox + 32, oy + 4 + 3 * i as i16),
         )?;
     }
     let text_color = (255, 255, 255);
@@ -119,9 +119,9 @@ pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
 fn draw_piece(o: &mut StdoutLock, piece: Piece, origin: (i16, i16)) -> Result<()> {
     let pos = piece.get_pos(Rotation::North, (origin.0 as i8, origin.1 as i8));
     let (x, y) = origin;
-    for dy in 0..4 {
+    for dy in -2..2 {
         move_cursor(o, (x, y + dy))?;
-        for dx in 0..4 {
+        for dx in -2..2 {
             set_color(
                 o,
                 if pos.contains(&(x as i8 + dx, (y - dy) as i8)) {
