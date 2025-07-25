@@ -10,13 +10,16 @@ use crate::{Bindings, Config, Sound};
 // soft drop? hit floor?
 // perfect clear
 // separate lock/harddrop
-const SOUNDS: &[&str] =
-    &["start", "move", "rotate", "spin", "lock", "line", "hold", "lose", "win"];
+const SOUNDS: &[&str] = &[
+    "start", "move", "rotate", "spin", "lock", "line", "hold", "lose", "win",
+];
 
 pub fn load(raw: &str, player: &mut impl Sound) -> Result<(Config, Bindings)> {
     let doc: KdlDocument = raw.parse()?;
     let get_node = |name| {
-        doc.get(name).and_then(KdlNode::children).context(format!("missing {name} node"))
+        doc.get(name)
+            .and_then(KdlNode::children)
+            .context(format!("missing {name} node"))
     };
     let config_node = get_node("config")?;
     let sound_node = get_node("sound")?;
@@ -25,14 +28,17 @@ pub fn load(raw: &str, player: &mut impl Sound) -> Result<(Config, Bindings)> {
     let config = Config {
         das: get_config("das", config_node)? as u16,
         arr: get_config("arr", config_node)? as u16,
-        gravity: get_config("gravity", config_node)? as u16,
+        gravity: get_config("gravity", config_node).map(|g| g as u16).ok(),
         soft_drop: get_config("soft_drop", config_node)? as u16,
         lock_delay: (
             get_config("lock", config_node)? as u16,
             get_config("extended", config_node)? as u16,
             get_config("timeout", config_node)? as u16,
         ),
-        ghost: config_node.get_arg("ghost").and_then(KdlValue::as_bool).unwrap_or(true),
+        ghost: config_node
+            .get_arg("ghost")
+            .and_then(KdlValue::as_bool)
+            .unwrap_or(true),
     };
     let bindings = Bindings {
         left: get_binding("left", bindings_node)?,

@@ -247,10 +247,18 @@ impl Game {
             DasLeft | DasRight => c.das,
             Arr => c.arr,
             SoftDrop => c.soft_drop,
-            Gravity => c.gravity,
+            Gravity => {
+                let Some(gravity) = c.gravity else { return };
+                gravity
+            }
             Lock => c.lock_delay.0,
             Extended => c.lock_delay.1,
-            Timeout => c.lock_delay.2,
+            Timeout => {
+                if c.gravity.is_none() {
+                    return;
+                };
+                c.lock_delay.2
+            }
             Start => 120,
             Are => todo!(),
         };

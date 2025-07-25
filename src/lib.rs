@@ -209,7 +209,7 @@ const FRAME: Duration = Duration::from_nanos(16_666_667);
 pub struct Config {
     pub das: u16,
     pub arr: u16,
-    pub gravity: u16,
+    pub gravity: Option<u16>,
     pub soft_drop: u16,
     pub lock_delay: (u16, u16, u16),
     pub ghost: bool,
