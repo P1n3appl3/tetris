@@ -188,7 +188,7 @@ pub enum InputEvent {
     Restart,
     Quit,
     ShowSolution(u8),
-    // Undo,
+    Undo,
     // Redo,
     // Garbage(n) // just for garbage line timer, need special handling to displace current piece upwards
     // Attack(n)

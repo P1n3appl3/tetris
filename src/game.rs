@@ -5,6 +5,14 @@ use tetrizz::beam_search::Node;
 use crate::*;
 
 #[derive(Clone)]
+pub struct Moment {
+    pub board: [[Cell; 10]; 50], // hope no one stacks higher than this 👀
+    pub current: PieceLocation,
+    pub hold: Option<Piece>,
+    pub upcomming: VecDeque<Piece>,
+}
+
+#[derive(Clone)]
 pub struct Game {
     pub board: [[Cell; 10]; 50], // hope no one stacks higher than this 👀
     pub upcomming: VecDeque<Piece>,
@@ -25,6 +33,7 @@ pub struct Game {
     pub rng: StdRng,
     pub spins: Vec<Node>,
     pub solution: Option<(Node, Box<Game>)>,
+    pub history: Vec<Moment>,
 }
 
 impl Game {
@@ -120,6 +129,7 @@ impl Game {
             state: GameState::Done,
             spins: Default::default(),
             solution: None,
+            history: vec![],
         }
     }
 
@@ -204,7 +214,24 @@ impl Game {
                     player.play("nohold").ok();
                 }
             }
+            Input(Undo) => {
+                let Some(prev) = self.history.pop() else {
+                    return false;
+                };
+                self.board = prev.board;
+                self.current = prev.current;
+                self.hold = prev.hold;
+                self.upcomming = prev.upcomming;
+                return true;
+            }
             Input(Hard) | Timer(Lock | Extended | Timeout) => {
+                let moment = Moment {
+                    board: self.board.clone(),
+                    current: self.current.clone(),
+                    hold: self.hold.clone(),
+                    upcomming: self.upcomming.clone(),
+                };
+                self.history.push(moment);
                 self.hard_drop(player);
                 return true;
             }

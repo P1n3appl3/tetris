@@ -59,7 +59,7 @@ impl EventLoop {
                 (('8', 0, true), ShowSolution(8)),
                 (('9', 0, true), ShowSolution(9)),
                 (('0', 0, true), ShowSolution(0)),
-                // (('u', 0, true), Undo),
+                (('u', 0, true), Undo),
                 // (('r', CTRL, true), Redo),
             ]
             .into_iter()
