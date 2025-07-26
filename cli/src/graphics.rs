@@ -93,6 +93,7 @@ pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
     }
     let text_color = (255, 255, 255);
     if let Some(target) = game.target_lines {
+        set_color(o, BG_COLOR)?;
         draw_text(
             o,
             (ox + 34, oy + 20),
@@ -114,6 +115,7 @@ pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
     } else {
         format!("{secs:2}.{decis:01} ")
     };
+    set_color(o, BG_COLOR)?;
     draw_text(o, (ox + 1, oy + 20), text_color, &time)?;
     draw_spins(o, game, (ox, oy))?;
     Ok(o.flush()?)
@@ -122,8 +124,9 @@ pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
 fn draw_spins(o: &mut StdoutLock, game: &Game, (ox, oy): (i16, i16)) -> Result<()> {
     let text_color = (255, 255, 255);
     set_color(o, BG_COLOR)?;
-    let spins = game.spin_shortlist();
+    let spins = Game::spin_shortlist(&game.spins);
     if let Some((suggestion, solution)) = &game.solution {
+        // render selected solution
         let mut game = solution.clone();
         let last = suggestion.moves.len() - 1;
         log::info!("{}", last);
@@ -169,6 +172,11 @@ fn draw_spins(o: &mut StdoutLock, game: &Game, (ox, oy): (i16, i16)) -> Result<(
         }
         log::info!("drawing solution board");
     } else {
+        if game.history.is_empty() {
+            return Ok(());
+        }
+        let prev = game.history.last().unwrap();
+        // render available solutions
         for (id, spin) in spins.iter().enumerate() {
             let spin_move_position = spin
                 .moves
@@ -176,14 +184,38 @@ fn draw_spins(o: &mut StdoutLock, game: &Game, (ox, oy): (i16, i16)) -> Result<(
                 .position(|m| m.0.spun && m.1.lines_cleared > 0)
                 .unwrap();
             let spin_move = spin.moves[spin_move_position];
-            let spin = format!(
+            let spin_summary = format!(
                 "{}: {:?} spin in {} pieces clearing {} lines",
                 id + 1,
                 spin_move.0.piece,
                 spin_move_position,
                 spin_move.1.lines_cleared,
             );
-            draw_text(o, (ox - 30, oy + 5 + id as i16), text_color, &spin)?;
+            let prev_moves = prev
+                .spins
+                .iter()
+                .map(|node| &node.moves)
+                .collect::<Vec<_>>();
+
+            let matches_previous_move = prev_moves
+                .iter()
+                .find(|&&prev_moveset| {
+                    let prev_spin_move_position = prev_moveset
+                        .iter()
+                        .position(|m| m.0.spun && m.1.lines_cleared > 0)
+                        .unwrap();
+                    let prev_spin_move = prev_moveset[prev_spin_move_position];
+                    prev_spin_move.0.piece == spin_move.0.piece
+                        && prev_spin_move_position > spin_move_position
+                })
+                .is_some();
+            let solution_color = if matches_previous_move {
+                (0x03, 0xc0, 0x4a) // parakeet
+            } else {
+                BG_COLOR
+            };
+            set_color(o, solution_color)?;
+            draw_text(o, (ox - 30, oy + 5 + id as i16), text_color, &spin_summary)?;
         }
     }
     Ok(())
@@ -217,7 +249,6 @@ fn draw_text(
     content: &str,
 ) -> Result<()> {
     move_cursor(o, origin)?;
-    set_color(o, BG_COLOR)?;
     Ok(write!(o, "\x1b[38;2;{r};{g};{b}m{content}")?)
 }
 

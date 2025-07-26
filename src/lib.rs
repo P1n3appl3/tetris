@@ -12,11 +12,21 @@ pub use game::Game;
 
 pub type Pos = [(i8, i8); 4];
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub struct PieceLocation {
     pub piece: Piece,
     pub pos: (i8, i8),
     pub rot: Rotation,
+}
+
+impl From<tetrizz::data::PieceLocation> for PieceLocation {
+    fn from(value: tetrizz::data::PieceLocation) -> Self {
+        PieceLocation {
+            piece: value.piece.into(),
+            pos: (value.x, value.y),
+            rot: value.rotation.into(),
+        }
+    }
 }
 
 macro_rules! lutify {

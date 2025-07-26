@@ -10,6 +10,7 @@ pub struct Moment {
     pub current: PieceLocation,
     pub hold: Option<Piece>,
     pub upcomming: VecDeque<Piece>,
+    pub spins: Vec<Node>,
 }
 
 #[derive(Clone)]
@@ -63,7 +64,7 @@ impl Game {
         board
     }
 
-    pub fn spin_shortlist(&self) -> Vec<Node> {
+    pub fn spin_shortlist(nodes: &[Node]) -> Vec<Node> {
         let mut bounties = vec![
             // kicks are broken for I at the moment
             // Piece::I,
@@ -75,7 +76,7 @@ impl Game {
             Piece::T,
         ];
         let mut spins = vec![];
-        'find_bounties: for node in self.spins.iter() {
+        'find_bounties: for node in nodes.iter() {
             for (m, placement_info) in node.moves.iter() {
                 if m.spun && placement_info.lines_cleared > 0 {
                     let piece = m.piece.into();
@@ -220,18 +221,13 @@ impl Game {
                 };
                 self.board = prev.board;
                 self.current = prev.current;
+                self.current.pos = (4, 20);
+                self.current.rot = Rotation::North;
                 self.hold = prev.hold;
                 self.upcomming = prev.upcomming;
-                return true;
+                self.spins = prev.spins;
             }
             Input(Hard) | Timer(Lock | Extended | Timeout) => {
-                let moment = Moment {
-                    board: self.board.clone(),
-                    current: self.current.clone(),
-                    hold: self.hold.clone(),
-                    upcomming: self.upcomming.clone(),
-                };
-                self.history.push(moment);
                 self.hard_drop(player);
                 return true;
             }
@@ -278,7 +274,7 @@ impl Game {
                     self.solution = None;
                 }
                 ind => {
-                    let suggestion = &self.spin_shortlist()[ind as usize - 1];
+                    let suggestion = &Game::spin_shortlist(&self.spins)[ind as usize - 1];
                     let mut game = self.clone();
                     game.config.ghost = false;
                     for (m, _) in &suggestion.moves {
@@ -344,6 +340,14 @@ impl Game {
     fn hard_drop(&mut self, player: &impl Sound) {
         while self.try_drop() {}
         let old_lines = self.lines;
+        let moment = Moment {
+            board: self.board.clone(),
+            current: self.current.clone(),
+            hold: self.hold.clone(),
+            upcomming: self.upcomming.clone(),
+            spins: self.spins.clone(),
+        };
+        self.history.push(moment);
         // TODO: redo with "piece placement result struct"
         if self.lock() {
             if self.lines == old_lines {
