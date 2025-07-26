@@ -53,6 +53,49 @@ impl Game {
         }
         board
     }
+
+    pub fn spin_shortlist(&self) -> Vec<Node> {
+        let mut bounties = vec![
+            // kicks are broken for I at the moment
+            // Piece::I,
+            Piece::J,
+            Piece::L,
+            Piece::T,
+            Piece::Z,
+            Piece::S,
+            Piece::T,
+        ];
+        let mut spins = vec![];
+        'find_bounties: for node in self.spins.iter() {
+            for (m, placement_info) in node.moves.iter() {
+                if m.spun && placement_info.lines_cleared > 0 {
+                    let piece = m.piece.into();
+                    let bounty = bounties.iter().position(|&b| b == piece);
+                    if let Some(bounty) = bounty {
+                        // spins.push((
+                        //     placement_info.lines_cleared,
+                        //     m.piece,
+                        //     placement_info.lines_cleared,
+                        //     ind + 1,
+                        // ));
+                        spins.push(node.clone());
+                        bounties.remove(bounty);
+                        if bounties.is_empty() {
+                            break 'find_bounties;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        spins.sort_by_key(|s| {
+            s.moves
+                .iter()
+                .take_while(|m| m.1.lines_cleared == 0)
+                .count()
+        });
+        spins
+    }
 }
 
 impl Game {
@@ -208,7 +251,7 @@ impl Game {
                     self.solution = None;
                 }
                 ind => {
-                    let suggestion = &self.spins[ind as usize - 1];
+                    let suggestion = &self.spin_shortlist()[ind as usize - 1];
                     let mut game = self.clone();
                     game.config.ghost = false;
                     for (m, _) in &suggestion.moves {

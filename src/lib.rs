@@ -70,8 +70,8 @@ impl PieceLocation {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[repr(u8)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
+// #[repr(u8)]
 pub enum Piece {
     I,
     J,
@@ -106,6 +106,19 @@ impl From<Piece> for tetrizz::data::Piece {
             Piece::S => tetrizz::data::Piece::S,
             Piece::T => tetrizz::data::Piece::T,
             Piece::Z => tetrizz::data::Piece::Z,
+        }
+    }
+}
+impl From<tetrizz::data::Piece> for Piece {
+    fn from(value: tetrizz::data::Piece) -> Self {
+        match value {
+            tetrizz::data::Piece::I => Piece::I,
+            tetrizz::data::Piece::J => Piece::J,
+            tetrizz::data::Piece::L => Piece::L,
+            tetrizz::data::Piece::O => Piece::O,
+            tetrizz::data::Piece::S => Piece::S,
+            tetrizz::data::Piece::T => Piece::T,
+            tetrizz::data::Piece::Z => Piece::Z,
         }
     }
 }

@@ -164,25 +164,27 @@ fn run_game(game: &mut Game, input: &EventLoop, player: &impl Sound, replay_dir:
                 3000,
             );
             let mut spins = vec![];
+            // let mut bounties = vec![
+            //     Piece::I,
+            //     Piece::J,
+            //     Piece::L,
+            //     Piece::T,
+            //     Piece::Z,
+            //     Piece::S,
+            //     Piece::T,
+            // ];
             for node in heap.iter() {
                 for (m, placement_info) in node.moves.iter() {
-                    if m.piece == tetrizz::data::Piece::I
-                        && m.rotation == tetrizz::data::Rotation::East
-                    {
-                        spins.push(node.clone());
-                    }
                     if placement_info.lines_cleared > 0 {
+                        if m.spun {
+                            spins.push(node.clone());
+                        }
                         break;
                     }
-                    // if placement_info.lines_cleared > 0 {
-                    //     if m.spun {
-                    //         spins.push(node.clone());
-                    //     }
-                    //     break;
-                    // }
                 }
             }
             spins.sort_by_key(|s| s.score);
+            spins.sort_by_key(|s| s.moves.iter().take_while(|m| !m.1.spin).count());
             game.spins = spins;
             new_piece = false;
         }

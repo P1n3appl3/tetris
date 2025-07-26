@@ -121,38 +121,26 @@ pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
 
 fn draw_spins(o: &mut StdoutLock, game: &Game, (ox, oy): (i16, i16)) -> Result<()> {
     let text_color = (255, 255, 255);
-    let mut spins = vec![];
-    for node in game.spins.iter() {
-        for (ind, (m, placement_info)) in node.moves.iter().enumerate() {
-            if m.spun && placement_info.lines_cleared > 0 {
-                let multiplier = if m.piece == tetrizz::data::Piece::T {
-                    2
-                } else {
-                    1
-                };
-                spins.push((
-                    placement_info.lines_cleared * multiplier,
-                    m.piece,
-                    placement_info.lines_cleared,
-                    ind + 1,
-                ));
-            }
-        }
-    }
-    spins.sort_by_key(|s| s.0);
     set_color(o, BG_COLOR)?;
+    let spins = game.spin_shortlist();
     if let Some((suggestion, solution)) = &game.solution {
         let mut game = solution.clone();
         let last = suggestion.moves.len() - 1;
         log::info!("{}", last);
-        for (id, (m, _)) in suggestion.moves.iter().enumerate() {
-            let m = format!(
-                "{:?} x:{} y:{} {:?} spin:{}",
-                m.piece, m.x, m.y, m.rotation, m.spun
-            );
+        for (id, (m, i)) in suggestion.moves.iter().enumerate() {
+            let b2b = if m.spun && i.lines_cleared > 0 {
+                " +1 b2b"
+            } else {
+                ""
+            };
+            let m = format!("{:?} x:{} y:{} {:?}{}", m.piece, m.x, m.y, m.rotation, b2b);
+
             draw_text(o, (ox - 30, oy + 5 + id as i16), text_color, &m)?;
+            if !b2b.is_empty() {
+                break;
+            }
         }
-        for (ind, (loc, _)) in suggestion.moves.iter().enumerate() {
+        for (ind, (loc, placement_info)) in suggestion.moves.iter().enumerate() {
             log::info!("hold: {:?}", game.hold);
             log::info!("current: {:?}", game.current);
             log::info!("upcoming: {:?}", game.upcomming);
@@ -171,7 +159,7 @@ fn draw_spins(o: &mut StdoutLock, game: &Game, (ox, oy): (i16, i16)) -> Result<(
             draw_board(o, &game, (ox + 40, oy))?;
             o.flush()?;
             std::thread::sleep(Duration::from_millis(400));
-            if ind == last || loc.spun {
+            if ind == last || (loc.spun && placement_info.lines_cleared > 0) {
                 break;
             }
             game.lock();
@@ -181,16 +169,19 @@ fn draw_spins(o: &mut StdoutLock, game: &Game, (ox, oy): (i16, i16)) -> Result<(
         }
         log::info!("drawing solution board");
     } else {
-        for (id, spin) in spins.iter().enumerate().take(9) {
-            if id == spin.3 {
-                break;
-            }
+        for (id, spin) in spins.iter().enumerate() {
+            let spin_move_position = spin
+                .moves
+                .iter()
+                .position(|m| m.0.spun && m.1.lines_cleared > 0)
+                .unwrap();
+            let spin_move = spin.moves[spin_move_position];
             let spin = format!(
                 "{}: {:?} spin in {} pieces clearing {} lines",
                 id + 1,
-                spin.1,
-                spin.3,
-                spin.2
+                spin_move.0.piece,
+                spin_move_position,
+                spin_move.1.lines_cleared,
             );
             draw_text(o, (ox - 30, oy + 5 + id as i16), text_color, &spin)?;
         }
