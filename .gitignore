@@ -2,6 +2,7 @@
 replays
 **/*.txt
 **/*.games
+web/pkg
 
 .direnv
 result
