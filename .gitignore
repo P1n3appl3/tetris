@@ -6,3 +6,6 @@ web/pkg
 
 .direnv
 result
+tags
+tags.temp
+tags.lock
