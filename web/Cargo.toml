@@ -7,15 +7,22 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
-# js-sys = "0.3"
+image = { version = "0.25", default-features = false, features = [
+    "png",
+    "qoi",
+    "webp",
+] }
 wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
 
 [dependencies.web-sys]
-features = [
-    'CanvasRenderingContext2d',
-    'Document',
-    'Element',
-    'HtmlCanvasElement',
-    'Window',
-]
 version = "0.3"
+features = [
+    'Document',
+    'Window',
+    'Element',
+    'CanvasRenderingContext2d',
+    'HtmlCanvasElement',
+    'ImageData',
+    'Response',
+]

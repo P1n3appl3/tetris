@@ -11,6 +11,10 @@
 - block skins, try "[]" like in tgm
 - show lines remaining in sprint with background color
 
+### web
+
+- try trunkrs.dev for development
+
 ## practice
 
 - undo key

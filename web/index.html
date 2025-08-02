@@ -6,15 +6,25 @@
         <title>yay it works</title>
     </head>
     <body>
-        <button onclick="yo();">click me pls 🥺</button>
+        <input type="text" id="input" placeholder="Enter image url" />
+        <button>load</button>
+        <canvas
+            id="board"
+            width="150"
+            height="150"
+            style="image-rendering: pixelated; image-rendering: crisp-edges"
+        ></canvas>
     </body>
     <script type="module">
-        import init, { hiiii } from "./pkg/web.js";
-
-        window.yo = hiiii;
+        import init, { hiiii, show_image } from "./pkg/web.js";
 
         async function run() {
             await init();
+            const button = document.querySelector("button");
+            button.addEventListener("click", (event) => {
+                hiiii();
+                show_image("https://i.imgur.com/zjItrsg.png", "board");
+            });
         }
 
         run();

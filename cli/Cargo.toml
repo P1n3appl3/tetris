@@ -21,7 +21,6 @@ tetris = { path = ".." }
 log.workspace = true
 anyhow.workspace = true
 rand.workspace = true
-js-sys = "0.3.77"
 
 [features]
 default = ["url-assets"]
