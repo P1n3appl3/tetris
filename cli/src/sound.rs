@@ -1,11 +1,10 @@
+use std::{collections::HashMap, fs::File, io::BufReader};
+
 use anyhow::{Result, anyhow};
 use directories::ProjectDirs;
 use rodio::{
-    Decoder, OutputStream, OutputStreamHandle, source::Source,
-    static_buffer::StaticSamplesBuffer,
+    Decoder, OutputStream, OutputStreamHandle, source::Source, static_buffer::StaticSamplesBuffer,
 };
-
-use std::{collections::HashMap, fs::File, io::BufReader};
 
 pub struct RodioPlayer {
     pub volume: f32,
@@ -48,8 +47,7 @@ impl tetris::Sound for RodioPlayer {
             decoder.sample_rate(),
             decoder.convert_samples().collect::<Vec<_>>().leak(),
         );
-        self.sounds
-            .insert(name.to_owned(), StaticSamplesBuffer::new(channels, rate, samples));
+        self.sounds.insert(name.to_owned(), StaticSamplesBuffer::new(channels, rate, samples));
         Ok(())
     }
 

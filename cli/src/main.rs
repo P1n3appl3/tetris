@@ -1,5 +1,6 @@
 mod graphics;
 mod input;
+mod settings;
 mod sound;
 
 use std::{
@@ -19,7 +20,6 @@ use graphics::RawMode;
 use input::EventLoop;
 use log::{LevelFilter, debug, error};
 use rand::prelude::*;
-
 use tetris::{Event, Game, GameState, InputEvent, Sound, replay::Replay};
 
 /// Simple program to greet a person
@@ -63,8 +63,7 @@ fn main() {
         fs::create_dir_all(d).ok();
         d.join("log.txt")
     });
-    let level =
-        LevelFilter::iter().nth(1 + args.verbose as usize).unwrap_or(LevelFilter::max());
+    let level = LevelFilter::iter().nth(1 + args.verbose as usize).unwrap_or(LevelFilter::max());
     ftail::Ftail::new().single_file(&log_file, true, level).init().ok();
     log_panics::init();
     let settings = if let Some(path) = args.config {
@@ -81,10 +80,8 @@ fn main() {
             }
         }
     };
-    let mut player =
-        sound::RodioPlayer::new(&dirs).expect("Failed to initialize audio engine");
-    let (config, keys) =
-        tetris::settings::load(&settings, &mut player).expect("Invalid settings file");
+    let mut player = sound::RodioPlayer::new(&dirs).expect("Failed to initialize audio engine");
+    let (config, keys) = settings::load(&settings, &mut player).expect("Invalid settings file");
     let _mode = RawMode::enter();
     let input = EventLoop::start(keys);
     let mut game = Game::new(config);
@@ -98,12 +95,7 @@ fn main() {
     while run_game(&mut game, &input, &player, &replay_dir) {}
 }
 
-fn run_game(
-    game: &mut Game,
-    input: &EventLoop,
-    player: &impl Sound,
-    replay_dir: &Path,
-) -> bool {
+fn run_game(game: &mut Game, input: &EventLoop, player: &impl Sound, replay_dir: &Path) -> bool {
     let (width, height) = get_size();
     if width < 40 || height < 22 {
         panic!("screen too small");
@@ -121,8 +113,7 @@ fn run_game(
         use InputEvent::*;
         use mpsc::RecvTimeoutError::*;
         let now = Instant::now();
-        let redraw_timeout =
-            Duration::from_millis(if game.state == Done { 10000 } else { 100 });
+        let redraw_timeout = Duration::from_millis(if game.state == Done { 10000 } else { 100 });
         let deadline = game
             .timers
             .front()
@@ -164,8 +155,8 @@ fn run_game(
             }
         }
 
-        // TODO: draw timers every tenth of a second in a separate loop, checking a "paused"
-        // atomic bool that's set by this thread based on gamestate
+        // TODO: draw timers every tenth of a second in a separate loop, checking a
+        // "paused" atomic bool that's set by this thread based on gamestate
         graphics::draw(width as i16, height as i16, game).unwrap();
     };
 
@@ -173,8 +164,7 @@ fn run_game(
         && let Some(target) = game.target_lines
         && game.lines >= target
     {
-        replay.length =
-            (game.end_time.unwrap() - game.start_time.unwrap()).as_millis() as u32;
+        replay.length = (game.end_time.unwrap() - game.start_time.unwrap()).as_millis() as u32;
         save_replay(&mut replay, replay_dir);
     }
     done
@@ -188,13 +178,9 @@ fn get_size() -> (u16, u16) {
 }
 
 fn save_replay(replay: &mut Replay, dir: &Path) {
-    let time = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time went backwards")
-        .as_secs();
+    let time = SystemTime::now().duration_since(UNIX_EPOCH).expect("time went backwards").as_secs();
     let path = dir.join(format!("{time}.json"));
-    let raw_replay =
-        serde_json::to_string_pretty(replay).expect("Failed to serialize replay");
+    let raw_replay = serde_json::to_string_pretty(replay).expect("Failed to serialize replay");
     fs::write(&path, &raw_replay).expect("Failed to write replay");
     log::info!("Replay saved to {path:?}");
 

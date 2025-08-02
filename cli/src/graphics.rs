@@ -1,9 +1,3 @@
-use log::error;
-use tetris::{Cell, Game, GameState, Piece, Rotation};
-
-use anyhow::{Result, anyhow};
-use termios::*;
-
 use std::{
     io::{self, Read as _, StdoutLock, Write},
     os::unix::prelude::AsRawFd,
@@ -15,6 +9,11 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+
+use anyhow::{Result, anyhow};
+use log::error;
+use termios::*;
+use tetris::{Cell, Game, GameState, Piece, Rotation};
 
 macro_rules! csi {
     ($( $x:expr ),*) => { concat!("\x1b[", $( $x ),*) };
@@ -56,9 +55,7 @@ fn set_color(o: &mut StdoutLock, (r, g, b): (u8, u8, u8)) -> Result<()> {
     static CURRENT_R: AtomicU8 = AtomicU8::new(0);
     static CURRENT_G: AtomicU8 = AtomicU8::new(0);
     static CURRENT_B: AtomicU8 = AtomicU8::new(0);
-    if CURRENT_R.load(Relaxed) != r
-        || CURRENT_G.load(Relaxed) != g
-        || CURRENT_B.load(Relaxed) != b
+    if CURRENT_R.load(Relaxed) != r || CURRENT_G.load(Relaxed) != g || CURRENT_B.load(Relaxed) != b
     {
         CURRENT_R.store(r, Relaxed);
         CURRENT_G.store(g, Relaxed);
@@ -171,10 +168,7 @@ fn draw_board(o: &mut StdoutLock, g: &Game, origin: (i16, i16)) -> Result<()> {
                 color = LOST_COLOR;
             } else if current_pos.contains(&(x, y)) && g.state == GameState::Running {
                 color = piece.color()
-            } else if g.config.ghost
-                && ghost.contains(&(x, y))
-                && g.state == GameState::Running
-            {
+            } else if g.config.ghost && ghost.contains(&(x, y)) && g.state == GameState::Running {
                 let (r, g, b) = piece.color();
                 color = (r / 3, g / 3, b / 3);
             }
@@ -202,8 +196,8 @@ impl RawMode {
                 let mut input = io::stdin().lock();
                 let _ = input.read(&mut buf);
             }
-            // TODO: debug, this doesn't print until after the recv_timeout happens for some reason?
-            // info!("{buf:?}");
+            // TODO: debug, this doesn't print until after the recv_timeout happens for some
+            // reason? info!("{buf:?}");
             tx.send(buf.contains(&b'u'))?;
             Ok(())
         });

@@ -7,17 +7,17 @@ edition = "2024"
 crate-type = ["cdylib"]
 
 [dependencies]
+tetris = { path = ".." }
 image = { version = "0.25", default-features = false, features = [
     "png",
     "qoi",
+    "gif",
     "webp",
 ] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-
-[dependencies.web-sys]
-version = "0.3"
-features = [
+getrandom = { version = "0.3", features = ["wasm_js"] }
+web-sys = { version = "0.3", features = [
     'Document',
     'Window',
     'Element',
@@ -25,4 +25,4 @@ features = [
     'HtmlCanvasElement',
     'ImageData',
     'Response',
-]
+] }

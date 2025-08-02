@@ -313,11 +313,7 @@ impl Game {
         }
         self.current = (next, (3, 21), Rotation::North);
         self.try_drop();
-        self.set_timer(if self.soft_dropping {
-            TimerEvent::SoftDrop
-        } else {
-            TimerEvent::Gravity
-        });
+        self.set_timer(if self.soft_dropping { TimerEvent::SoftDrop } else { TimerEvent::Gravity });
         self.set_timer(TimerEvent::Timeout);
         true
     }

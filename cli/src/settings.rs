@@ -1,23 +1,20 @@
 use anyhow::{Context, Result};
 use kdl::{KdlDocument, KdlNode, KdlValue};
-
-use crate::{Bindings, Config, Sound};
+use tetris::{Bindings, Config, Sound};
 
 // TODO: make it an enum
 // TODO: add sounds:
 // combo (auto generate?), combo break
-// quad, b2b, spin-clear, maybe make those all just one sound for like "fancy line".
-// soft drop? hit floor?
+// quad, b2b, spin-clear, maybe make those all just one sound for like "fancy
+// line". soft drop? hit floor?
 // perfect clear
 // separate lock/harddrop
-const SOUNDS: &[&str] =
-    &["start", "move", "rotate", "spin", "lock", "line", "hold", "lose", "win"];
+const SOUNDS: &[&str] = &["start", "move", "rotate", "spin", "lock", "line", "hold", "lose", "win"];
 
 pub fn load(raw: &str, player: &mut impl Sound) -> Result<(Config, Bindings)> {
     let doc: KdlDocument = raw.parse()?;
-    let get_node = |name| {
-        doc.get(name).and_then(KdlNode::children).context(format!("missing {name} node"))
-    };
+    let get_node =
+        |name| doc.get(name).and_then(KdlNode::children).context(format!("missing {name} node"));
     let config_node = get_node("config")?;
     let sound_node = get_node("sound")?;
     let bindings_node = get_node("bindings")?;

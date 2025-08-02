@@ -1,3 +1,6 @@
+use std::array;
+
+use image::DynamicImage;
 use wasm_bindgen::{Clamped, prelude::*};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{ImageData, js_sys::Uint8Array};
@@ -14,6 +17,10 @@ pub fn hiiii() {
     alert("Hello, my-project!");
 }
 
+// TODO: pre-bake modifications like ghost piece?
+/// permanent, garbage, z, l, o, s, i, j, t
+type Skin = [DynamicImage; 9];
+
 #[wasm_bindgen]
 pub async fn fetch_url_binary(url: String) -> Result<Uint8Array, JsValue> {
     let window = web_sys::window().unwrap();
@@ -22,6 +29,24 @@ pub async fn fetch_url_binary(url: String) -> Result<Uint8Array, JsValue> {
     let response: web_sys::Response = result.dyn_into().unwrap();
     let image_data = JsFuture::from(response.array_buffer()?).await?;
     Ok(Uint8Array::new(&image_data))
+}
+
+// https://konsola5.github.io/jstris-customization-database/
+// https://i.imgur.com/HkJWOEQ.png
+async fn load_skin(url: String) -> Result<Skin, JsValue> {
+    let binary = fetch_url_binary(url).await?;
+    let altbuf = binary.to_vec();
+
+    let mut image = image::load_from_memory_with_format(&altbuf, image::ImageFormat::Png).unwrap();
+    assert_eq!(
+        image.width(),
+        image.height() * 9,
+        "Skin had wrong dimensions: {}x{}, should be a 9:1 ratio",
+        image.width(),
+        image.height()
+    );
+    let h = image.height();
+    Ok(array::from_fn(|i| image.crop(i as u32 * h, 0, (i as u32 + 1) * h, h)))
 }
 
 #[wasm_bindgen]
@@ -44,14 +69,10 @@ pub async fn show_image(url: String, canvas: String) -> Result<(), JsValue> {
 
     let window = web_sys::window().unwrap();
     let document = window.document().expect("Could not get document");
-    let canvas = document
-        .get_element_by_id(&canvas)
-        .unwrap()
-        .dyn_into::<web_sys::HtmlCanvasElement>()?;
-    let context = canvas
-        .get_context("2d")?
-        .unwrap()
-        .dyn_into::<web_sys::CanvasRenderingContext2d>()?;
+    let canvas =
+        document.get_element_by_id(&canvas).unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
+    let context =
+        canvas.get_context("2d")?.unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>()?;
 
     context.put_image_data(&image_data, 0.0, 0.0)?;
 

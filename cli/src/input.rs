@@ -6,9 +6,10 @@ use std::{
     thread,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
+use tetris::InputEvent;
 
-use tetris::{settings::keys::*, InputEvent};
+use crate::settings::keys::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct KeyEvent {
@@ -96,11 +97,8 @@ fn parse_kitty_key(buf: &[u8]) -> Result<KeyEvent> {
         .split(';')
         .map(|s| s.split(':').map(|s| s.parse().unwrap_or_default()).collect())
         .collect();
-    let code = if trailer == b'u' {
-        char::from_u32(parts[0][0]).unwrap()
-    } else {
-        trailer_map(trailer)
-    };
+    let code =
+        if trailer == b'u' { char::from_u32(parts[0][0]).unwrap() } else { trailer_map(trailer) };
     let (mods, press) = if let Some(v) = parts.get(1) {
         match v[..] {
             [a] | [a, 1] => (a - 1, true),

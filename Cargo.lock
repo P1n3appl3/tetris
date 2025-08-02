@@ -414,6 +414,7 @@ dependencies = [
  "clap",
  "directories",
  "ftail",
+ "kdl",
  "libc",
  "log",
  "log-panics",
@@ -424,6 +425,12 @@ dependencies = [
  "termios",
  "tetris",
 ]
+
+[[package]]
+name = "color_quant"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
 name = "colorchoice"
@@ -811,9 +818,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26145e563e54f2cadc477553f1ec5ee650b00862f0a58bcd12cbdc5f0ea2d2f4"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi",
  "wasi 0.14.2+wasi-0.2.4",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "gif"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ae047235e33e2829703574b54fdec96bfbad892062d97fed2f76022287de61b"
+dependencies = [
+ "color_quant",
+ "weezl",
 ]
 
 [[package]]
@@ -1084,6 +1103,8 @@ checksum = "db35664ce6b9810857a38a906215e75a9c879f0696556a39f59c62829710251a"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
+ "color_quant",
+ "gif",
  "image-webp",
  "num-traits",
  "png",
@@ -2291,9 +2312,7 @@ name = "tetris"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "kdl",
  "log",
- "once_cell",
  "rand 0.9.1",
  "serde",
 ]
@@ -2648,7 +2667,9 @@ dependencies = [
 name = "web"
 version = "0.1.0"
 dependencies = [
+ "getrandom 0.3.3",
  "image",
+ "tetris",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -2673,6 +2694,12 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "weezl"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a751b3277700db47d3e574514de2eced5e54dc8a5436a3bf7a0b248b2cee16f3"
 
 [[package]]
 name = "winapi"

@@ -1,14 +1,12 @@
 mod game;
 pub mod replay;
-pub mod settings;
 
 use std::time::Duration;
 
 use anyhow::Result;
+pub use game::Game;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
-
-pub use game::Game;
 
 pub type Pos = [(i8, i8); 4];
 
@@ -107,22 +105,6 @@ pub struct Bindings {
     pub ccw: char,
     pub flip: char,
     pub hold: char,
-}
-
-impl Default for Bindings {
-    fn default() -> Self {
-        use settings::keys::*;
-        Self {
-            left: LEFT,
-            right: RIGHT,
-            soft: DOWN,
-            hard: UP,
-            cw: 'x',
-            ccw: 'z',
-            flip: 'a',
-            hold: LEFT_SHIFT,
-        }
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -258,21 +240,8 @@ const PIECE_DATA: [[Pos; 4]; 7] = [
     ],
 ];
 
-const ROTI: [[(i8, i8); 5]; 12] = [
-    [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)], // n -> e
-    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)], // e -> n
-    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)], // e -> s
-    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)], // s -> e
-    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)], // s -> w
-    [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)], // w -> s
-    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)], // w -> n
-    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)], // n -> w
-    [(0, 0), (0, 1), (0, 0), (0, 0), (0, 0)],    // n -> s
-    [(0, 0), (0, -1), (0, 0), (0, 0), (0, 0)],   // s -> n
-    [(0, 0), (1, 0), (0, 0), (0, 0), (0, 0)],    // e -> w
-    [(0, 0), (-1, 0), (0, 0), (0, 0), (0, 0)],   // w -> e
-];
-
+// SRS kicks from: https://harddrop.com/wiki/SRS#How_guideline_SRS_actually_works
+// 180 kicks from: https://tetrio.wiki.gg/images/5/52/TETR.IO_180kicks.png?6d5d9d
 const ROTJLSTZ: [[(i8, i8); 5]; 12] = [
     [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)], // n -> e
     [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],     // e -> n
@@ -286,4 +255,21 @@ const ROTJLSTZ: [[(i8, i8); 5]; 12] = [
     [(0, 0), (0, -1), (0, 0), (0, 0), (0, 0)],     // s -> n
     [(0, 0), (1, 0), (0, 0), (0, 0), (0, 0)],      // e -> w
     [(0, 0), (-1, 0), (0, 0), (0, 0), (0, 0)],     // w -> e
+];
+
+// I spins are slightly asymetrical, see https://harddrop.com/wiki/I-spins_in_SRS
+// (yum)
+const ROTI: [[(i8, i8); 5]; 12] = [
+    [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)], // n -> e
+    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)], // e -> n
+    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)], // e -> s
+    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)], // s -> e
+    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)], // s -> w
+    [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)], // w -> s
+    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)], // w -> n
+    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)], // n -> w
+    [(0, 0), (0, 1), (0, 0), (0, 0), (0, 0)],    // n -> s
+    [(0, 0), (0, -1), (0, 0), (0, 0), (0, 0)],   // s -> n
+    [(0, 0), (1, 0), (0, 0), (0, 0), (0, 0)],    // e -> w
+    [(0, 0), (-1, 0), (0, 0), (0, 0), (0, 0)],   // w -> e
 ];
