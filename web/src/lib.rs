@@ -1,6 +1,9 @@
 #![allow(unused)]
 mod fps;
 mod skin;
+use std::array;
+use std::sync::mpsc::TryRecvError;
+use web_time::Instant;
 
 use log::info;
 use tetris::{Config, Game};
@@ -8,13 +11,29 @@ use ultraviolet::DVec3;
 use wasm_bindgen::prelude::*;
 use web_time::Instant;
 
+struct NoTruePlayer;
+
+impl Sound for NoTruePlayer {
+    fn add_sound(&mut self, _name: &str, _resource: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn set_volume(&mut self, _level: f32) {}
+
+    fn play(&self, _s: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
 #[wasm_bindgen]
 pub async fn main() -> Result<(), JsValue> {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
     wasm_logger::init(wasm_logger::Config::default());
+    let events = std::sync::mpsc::channel();
+    init_input_handlers(events.0)?;
     info!("initializing");
     let window = web_sys::window().unwrap();
-    let document = window.document().expect("Could not get document");
+    // let document = window.document().expect("Could not get document");
     let default_skin = "https://i.imgur.com/zjItrsg.png";
     let skin = skin::load_skin(default_skin);
     let board =
@@ -39,7 +58,7 @@ pub async fn main() -> Result<(), JsValue> {
 
     let (mut raf_loop, canceler) = wasm_repeated_animation_frame::RafLoop::new();
     let mut fps = fps::FPSCounter::new();
-    let game = Game::new(config);
+    let mut game = Game::new(config);
     info!("starting event loop");
     let start_time = Instant::now();
     loop {
@@ -52,6 +71,19 @@ pub async fn main() -> Result<(), JsValue> {
         ctx.set_fill_style_str(&format!("rgb({r}, {g}, {b})"));
         ctx.fill_rect(0.0, 0.0, hold.width() as f64, hold.height() as f64);
     }
+    let keyboard_events = events.1;
+    loop {
+        match keyboard_events.try_recv() {
+            Ok(event) => {
+                let t = Instant::now();
+                game.handle(event, t, &NoTruePlayer);
+            }
+            Err(TryRecvError::Empty) => {}
+            Err(TryRecvError::Disconnected) => break,
+        }
+        // draw(game, skin);
+    }
+    Ok(())
 }
 
 // ty inigo <3
@@ -71,5 +103,47 @@ pub fn draw(game: Game, skin: &skin::Skin) -> Result<(), JsValue> {
     let context =
         canvas.get_context("2d")?.unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>()?;
     context.draw_image_with_image_bitmap(todo!(), 0.0, 0.0)?;
+    Ok(())
+}
+
+fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
+    web_sys::console::log_1(&"initializing input handlers".into());
+    let window = web_sys::window().expect("could not get window handle");
+
+    let input = Rc::new(RefCell::new(window));
+    use tetris::InputEvent::*;
+
+    let closure: Box<dyn FnMut(_)> = Box::new({
+        let events = events.clone();
+        let keymap = [
+            ("left", PressLeft),
+            ("right", PressRight),
+            ("down", PressSoft),
+            ("space", Hard),
+            ("f", Cw),
+            ("d", Ccw),
+            ("a", Flip),
+            ("s", Hold),
+            ("r", Restart),
+            ("q", Quit),
+        ]
+        .into_iter()
+        .collect::<HashMap<&'static str, InputEvent>>();
+        move |keydown: web_sys::KeyboardEvent| {
+            web_sys::console::log_1(&"got an event".into());
+            let key = keydown.key();
+            if let Some(&ev) = keymap.get(key.as_str()) {
+                events.send(Event::Input(ev)).unwrap();
+            }
+        }
+    });
+
+    let closure = Closure::wrap(closure);
+
+    input
+        .borrow_mut()
+        .add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref())?;
+    closure.forget();
+
     Ok(())
 }
