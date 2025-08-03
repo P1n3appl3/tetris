@@ -3,6 +3,7 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="icon" type="image/png" href="./icon.png" />
         <title>yay it works</title>
     </head>
     <style>
@@ -19,27 +20,63 @@
             margin: 0;
             gap: 20px;
         }
+        #main {
+            float: left;
+            position: relative;
+            flex-direction: row;
+            width: 500px;
+            transform: translate(0px);
+        }
+        #left {
+            margin-right: 10px;
+            float: left;
+        }
+        #center {
+            float: left;
+        }
+        #right {
+            margin-left: 10px;
+            float: left;
+        }
+        canvas {
+            display: inline-block;
+            background-color: lavenderblush;
+            /*image-rendering: pixelated;
+            image-rendering: crisp-edges*/
+        }
     </style>
     <body>
-        <input type="text" id="input" placeholder="Enter image url" />
-        <button>load</button>
-        <canvas
-            id="board"
-            width="150"
-            height="150"
-            style="image-rendering: pixelated; image-rendering: crisp-edges"
-        ></canvas>
+        <div id="main">
+            <div id="left">
+                <canvas id="hold" width="96" height="96"></canvas>
+            </div>
+            <div id="center">
+                <canvas
+                    id="board"
+                    width="242"
+                    height="480"
+                    style="
+                        background: url(https://konsola5.github.io/jstris-customization-database/assets/jstris-grid.png);
+                    "
+                >
+                </canvas>
+            </div>
+            <div id="right">
+                <canvas id="queue" width="96" height="360"></canvas>
+                <div id="right-info">lines remaining</div>
+            </div>
+        </div>
     </body>
+    <div>
+        <input type="text" id="input" placeholder="Enter skin image url" />
+        <button>load</button>
+    </div>
     <script type="module">
-        import init, { hiiii, show_image } from "./pkg/web.js";
+        import init, { main } from "./pkg/web.js";
 
         async function run() {
             await init();
-            const button = document.querySelector("button");
-            button.addEventListener("click", (event) => {
-                hiiii();
-                show_image("https://i.imgur.com/zjItrsg.png", "board");
-            });
+            main();
         }
 
         run();
