@@ -9,6 +9,11 @@
     <style>
         html {
             background-color: rgb(17, 17, 17);
+            color: lavenderblush;
+            /*TODO: ship a font*/
+            font-family:
+                Noto Sans,
+                sans;
         }
 
         body {
@@ -40,7 +45,7 @@
         }
         canvas {
             display: inline-block;
-            background-color: lavenderblush;
+            background-color: blanchedalmond;
             /*image-rendering: pixelated;
             image-rendering: crisp-edges*/
         }
@@ -68,7 +73,7 @@
         </div>
     </body>
     <div>
-        <input type="text" id="input" placeholder="Enter skin image url" />
+        <input type="text" id="skin-url" placeholder="Enter skin image url" />
         <button>load</button>
     </div>
     <script type="module">
@@ -76,9 +81,10 @@
 
         async function run() {
             await init();
-            main();
+            await main();
         }
 
         run();
+        console.log("ran");
     </script>
 </html>
