@@ -93,7 +93,7 @@
         build = tetris;
         test = craneLib.cargoNextest (commonArgs // {
           inherit cargoArtifacts;
-          cargoTestExtraArgs = "--workspace";
+          cargoNextestExtraArgs = "--workspace";
         });
         clippy = addBindgenEnvVar (craneLib.cargoClippy (commonArgs // {
           inherit cargoArtifacts;

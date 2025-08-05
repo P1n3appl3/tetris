@@ -67,15 +67,9 @@ pub async fn main() -> Result<(), JsValue> {
         }
     };
     let input_fut = async {
-        loop {
-            match rx.next().await {
-                Some(event) => {
-                    let t = Instant::now();
-                    game.handle(event, t, &NullPlayer);
-                }
-                None => break,
-            }
-            // draw(game, skin);
+        while let Some(event) = rx.next().await {
+            let t = Instant::now();
+            game.handle(event, t, &NullPlayer);
         }
     };
     futures::future::join(raf_fut, input_fut).await;
@@ -129,7 +123,7 @@ fn init_input_handlers(events: mpsc::UnboundedSender<Event>) -> Result<(), JsVal
             let key = keydown.key();
             info!("got an event: {key}");
             if let Some(&ev) = keymap.get(key.as_str()) {
-                events.send(Event::Input(ev.clone()));
+                events.send(Event::Input(ev));
             }
         }
     });
