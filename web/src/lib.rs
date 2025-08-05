@@ -1,3 +1,4 @@
+#![allow(unused)]
 mod fps;
 mod skin;
 
@@ -59,7 +60,7 @@ pub fn fun_color(t: f64) -> DVec3 {
     let b = DVec3::new(0.5, 0.5, 0.5);
     let c = DVec3::new(1.0, 1.0, 1.0);
     let d = DVec3::new(0.0, 0.33, 0.67);
-    a + b * (6.283185 * (c * t + d)).map(|f| f.cos()) * 256.0
+    a + b * (std::f64::consts::TAU * (c * t + d)).map(|f| f.cos()) * 256.0
 }
 
 pub fn draw(game: Game, skin: &skin::Skin) -> Result<(), JsValue> {
@@ -69,6 +70,6 @@ pub fn draw(game: Game, skin: &skin::Skin) -> Result<(), JsValue> {
         document.get_element_by_id("board").unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
     let context =
         canvas.get_context("2d")?.unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>()?;
-    context.draw_image_with_image_bitmap(todo!(), 0.0, 0.0);
+    context.draw_image_with_image_bitmap(todo!(), 0.0, 0.0)?;
     Ok(())
 }

@@ -1,27 +1,27 @@
 // reserved keys:
 // "q" / ctrl+c: quit
 // "r": restart
-// bindings {
-//     left "left"
-//     right "right"
-//     cw "x"
-//     ccw "z"
-//     flip "a"
-//     hard "up"
-//     soft "down"
-//     hold "shift"
-// }
-
 bindings {
-    left "j"
-    right "l"
-    soft "k"
-    hard "space"
-    cw "f"
-    ccw "d"
-    flip "s"
-    hold "a"
+    left "left"
+    right "right"
+    soft "down"
+    cw "x"
+    ccw "z"
+    hard "up"
+    flip "a"
+    hold "shift"
 }
+
+// bindings {
+//     right "l"
+//     soft "k"
+//     left "j"
+//     hard "space"
+//     cw "f"
+//     ccw "d"
+//     flip "s"
+//     hold "a"
+// }
 
 // all values are specified in frames, fractions are allowed
 config {

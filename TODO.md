@@ -14,6 +14,7 @@
 ### web
 
 - try trunkrs.dev for development
+- add lib.rs/fumen and allow pasting in boards
 
 ## practice
 

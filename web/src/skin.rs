@@ -13,7 +13,7 @@ pub type Skin = [DynamicImage; 9];
 #[wasm_bindgen]
 pub async fn fetch_url(url: &str) -> Result<Blob, JsValue> {
     let window = web_sys::window().unwrap();
-    let result = JsFuture::from(window.fetch_with_str(&url)).await?;
+    let result = JsFuture::from(window.fetch_with_str(url)).await?;
     let response: Response = result.dyn_into().unwrap();
     JsFuture::from(response.blob()?).await?.dyn_into()
 }

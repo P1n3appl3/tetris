@@ -16,7 +16,7 @@ impl FPSCounter {
         let now = Instant::now();
         let a_second_ago = now - Duration::from_secs(1);
 
-        while self.last_second_frames.front().map_or(false, |t| *t < a_second_ago) {
+        while self.last_second_frames.front().is_some_and(|t| *t < a_second_ago) {
             self.last_second_frames.pop_front();
         }
 

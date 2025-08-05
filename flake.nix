@@ -41,17 +41,21 @@
             '';
       });
 
-      src = craneLib.cleanCargoSource ./.;
+      src = let
+        kdlFilter = path: _type: builtins.match ".*kdl$" path != null;
+        kdlOrCargo = path: type:
+          (kdlFilter path type) || (craneLib.filterCargoSources path type);
+      in lib.cleanSourceWith { src = ./.; filter = kdlOrCargo; name = "source"; };
 
       commonArgs = {
         inherit src;
         strictDeps = true;
 
         nativeBuildInputs = lib.optionals pkgs.stdenv.isLinux (with pkgs; [
-          pkg-config makeWrapper alsa-lib openssl
+          pkg-config makeWrapper
         ]);
 
-        buildInputs = with pkgs; [ libiconv ] ++
+        buildInputs = with pkgs; [ libiconv openssl ] ++
           (lib.optional (stdenv.isLinux) alsa-lib) ++
           (lib.optional (stdenv.isDarwin) pkgs.xcbuild);
       } // (pkgs.lib.optionalAttrs (pkgs.stdenv.isDarwin) darwinArgs);
@@ -62,6 +66,7 @@
         inherit cargoArtifacts;
         doCheck = false; # there's a separate check for that
       } // (pkgs.lib.optionalAttrs (pkgs.stdenv.isLinux) {
+        cargoExtraArgs = "-p cli";
         postInstall = ''
           wrapProgram $out/bin/tetris \
             --set-default "ALSA_PLUGIN_DIR" "${pkgs.alsa-plugins}/lib/alsa-lib"
@@ -87,13 +92,9 @@
         test = craneLib.cargoNextest (commonArgs // { inherit cargoArtifacts; });
         clippy = addBindgenEnvVar (craneLib.cargoClippy (commonArgs // {
           inherit cargoArtifacts;
-          cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+          cargoClippyExtraArgs = "--all-targets --workspace -- --deny warnings";
         }));
         doc = craneLib.cargoDoc (commonArgs // { inherit cargoArtifacts; });
-        fmt = craneLib.cargoFmt { inherit src; };
-        toml-fmt = craneLib.taploFmt {
-          src = pkgs.lib.sources.sourceFilesBySuffices src [ ".toml" ];
-        };
       };
 
       devShells.default = craneLib.devShell {
