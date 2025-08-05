@@ -48,13 +48,13 @@
         }
         #fps {
             position: absolute;
-            top: 0;
-            left: 0;
-            color: white;
-            font-size: 16px;
-            font-weight: bold;
-            padding: 5px;
-            background-color: rgba(0, 0, 0, 0.5);
+            bottom: 0;
+            right: 0;
+            color: mediumaquamarine;
+            font-size: 10px;
+        }
+        #stats {
+            text-align: center;
         }
         canvas {
             display: inline-block;
@@ -70,7 +70,9 @@
             </div>
             <div id="center">
                 <canvas id="board" width="242" height="480"> </canvas>
-                <div id="timer">0.0</div>
+                <div id="stats">
+                    <div id="timer">0.0</div>
+                </div>
             </div>
             <div id="right">
                 <canvas id="queue" width="96" height="360"></canvas>

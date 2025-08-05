@@ -14,6 +14,7 @@ image = { version = "0.25", default-features = false, features = [
     "gif",
     "webp",
 ] }
+ultraviolet = { version = "0.10", features = ["f64"] }
 log.workspace = true
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
