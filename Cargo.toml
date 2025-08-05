@@ -6,6 +6,7 @@ default-members = ["cli"]
 log = "0.4"
 rand = "0.9"
 anyhow = "1"
+futures = "0.3"
 serde = { version = "1", features = ["derive"] }
 web-time = "1.1"
 fumen = "0.1"
@@ -16,7 +17,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-log.workspace = true
 rand.workspace = true
 serde.workspace = true
 anyhow.workspace = true

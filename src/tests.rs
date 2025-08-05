@@ -1,21 +1,10 @@
 use std::time::Instant;
 
-use crate::Event;
 use fumen::{CellColor, Fumen, PieceType, RotationState};
+
 // use pretty_assertions::assert_eq;
-
 use super::{InputEvent::*, *};
-
-struct NullPlayer;
-impl Sound for NullPlayer {
-    fn add_sound(&mut self, _name: &str, _resource: &str) -> Result<()> {
-        Ok(())
-    }
-    fn set_volume(&mut self, _level: f32) {}
-    fn play(&self, _s: &str) -> Result<()> {
-        Ok(())
-    }
-}
+use crate::Event;
 
 impl From<PieceType> for Piece {
     fn from(value: PieceType) -> Self {
@@ -132,7 +121,6 @@ where
     println!("{}", render(g.board, g.current));
     assert_eq!(events.len(), f.pages.len() - 1);
     for (i, (events, page)) in events.zip(f.pages[1..].iter()).enumerate() {
-        // dbg!(page);
         for e in events.into_iter() {
             g.handle(e.into(), t, &NullPlayer);
         }
