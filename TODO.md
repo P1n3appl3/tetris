@@ -15,6 +15,7 @@
 
 - try trunkrs.dev for development
 - add lib.rs/fumen and allow pasting in boards
+  - maybe use mxmoss.me/sketris instead of fumens...
 
 ## practice
 

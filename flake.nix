@@ -65,13 +65,15 @@
       tetris = craneLib.buildPackage (commonArgs // {
         inherit cargoArtifacts;
         doCheck = false; # there's a separate check for that
-      } // (pkgs.lib.optionalAttrs (pkgs.stdenv.isLinux) {
+      } // {
         cargoExtraArgs = "-p cli";
         postInstall = ''
+          mv $out/bin/cli $out/bin/tetris
+        '' + (pkgs.lib.optionalString (pkgs.stdenv.isLinux) ''
           wrapProgram $out/bin/tetris \
             --set-default "ALSA_PLUGIN_DIR" "${pkgs.alsa-plugins}/lib/alsa-lib"
-        '';
-      }));
+        '');
+      });
 
       # jstrisSprint = pkgs.writeShellApplication {
       #   name = "jstris-sprint";
@@ -89,12 +91,18 @@
 
       checks = {
         build = tetris;
-        test = craneLib.cargoNextest (commonArgs // { inherit cargoArtifacts; });
+        test = craneLib.cargoNextest (commonArgs // {
+          inherit cargoArtifacts;
+          cargoTestExtraArgs = "--workspace";
+        });
         clippy = addBindgenEnvVar (craneLib.cargoClippy (commonArgs // {
           inherit cargoArtifacts;
           cargoClippyExtraArgs = "--all-targets --workspace -- --deny warnings";
         }));
-        doc = craneLib.cargoDoc (commonArgs // { inherit cargoArtifacts; });
+        doc = craneLib.cargoDoc (commonArgs // {
+          inherit cargoArtifacts;
+          cargoDocExtraArgs = "--no-deps -p tetris";
+        });
       };
 
       devShells.default = craneLib.devShell {

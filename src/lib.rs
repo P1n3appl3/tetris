@@ -1,5 +1,7 @@
 mod game;
 pub mod replay;
+#[cfg(test)]
+mod tests;
 
 use std::time::Duration;
 
@@ -81,6 +83,18 @@ pub enum Event {
     Input(InputEvent),
 }
 
+impl From<TimerEvent> for Event {
+    fn from(t: TimerEvent) -> Self {
+        Self::Timer(t)
+    }
+}
+
+impl From<InputEvent> for Event {
+    fn from(i: InputEvent) -> Self {
+        Self::Input(i)
+    }
+}
+
 const FRAME: Duration = Duration::from_nanos(16_666_667);
 
 // TODO: make all these floats (maybe ms instead of frames?)
@@ -93,6 +107,19 @@ pub struct Config {
     pub soft_drop: u16,
     pub lock_delay: (u16, u16, u16),
     pub ghost: bool,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            das: 10,
+            arr: 2,
+            gravity: 60,
+            soft_drop: 4,
+            lock_delay: (30, 300, 1200),
+            ghost: true,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug)]

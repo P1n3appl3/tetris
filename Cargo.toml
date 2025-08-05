@@ -8,6 +8,7 @@ rand = "0.9"
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 web-time = "1.1"
+fumen = "0.1"
 
 [package]
 name = "tetris"
@@ -21,3 +22,6 @@ serde.workspace = true
 anyhow.workspace = true
 # TODO: rewrite this to use `performance.now()` on the web side
 web-time.workspace = true
+
+[dev-dependencies]
+fumen.workspace = true

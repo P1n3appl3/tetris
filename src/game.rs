@@ -4,9 +4,11 @@ use web_time::Instant;
 
 use crate::*;
 
+pub type Board = [[Cell; 10]; 50]; // hope no one stacks higher than this 👀
+
 #[derive(Clone)]
 pub struct Game {
-    pub board: [[Cell; 10]; 50], // hope no one stacks higher than this 👀
+    pub board: Board,
     pub upcomming: VecDeque<Piece>,
     pub current: (Piece, (i8, i8), Rotation),
     pub hold: Option<Piece>,
@@ -32,7 +34,7 @@ impl Game {
             rng: StdRng::from_os_rng(),
             board: [[Cell::Empty; 10]; 50],
             upcomming: Default::default(),
-            current: (Piece::I, (0, 0), Rotation::North),
+            current: (Piece::I, (3, 21), Rotation::North),
             hold: None,
             lines: 0,
             target_lines: Some(40),
