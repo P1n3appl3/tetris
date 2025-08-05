@@ -1,12 +1,11 @@
 use std::array;
 
 use image::{DynamicImage, ImageFormat};
+use log::info;
 use tetris::{Config, Game};
 use wasm_bindgen::{Clamped, prelude::*};
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Blob, ImageData, Response, console, js_sys::Uint8Array};
-
-// TODO: maybe install a panic hook
 
 /// permanent, garbage, z, l, o, s, i, j, t
 type Skin = [DynamicImage; 9];
@@ -44,15 +43,15 @@ pub async fn load_skin(url: &str) -> Result<Skin, JsValue> {
 
 #[wasm_bindgen]
 pub async fn main() -> Result<(), JsValue> {
-    console::log_1(&"initializing".into());
+    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+    wasm_logger::init(wasm_logger::Config::default());
+    info!("initializing");
     let window = web_sys::window().unwrap();
     let document = window.document().expect("Could not get document");
     let default_skin = "https://i.imgur.com/zjItrsg.png";
     let skin = load_skin(default_skin);
-    console::time();
-    let func = Closure::<dyn FnMut()>::new(|| -> () {
-        console::time_log();
-        console::log_1(&"testing".into());
+    let func = Closure::<dyn FnMut(f64)>::new(|timestamp| -> () {
+        info!("{timestamp:?}");
         ()
     });
     window.request_animation_frame(func.as_ref().unchecked_ref())?;
@@ -66,7 +65,7 @@ pub async fn main() -> Result<(), JsValue> {
     };
 
     let game = Game::new(config);
-    console::log_1(&"starting event loop".into());
+    info!("starting event loop");
     Ok(())
 }
 
