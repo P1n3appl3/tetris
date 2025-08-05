@@ -52,7 +52,6 @@ pub async fn main() -> Result<(), JsValue> {
     let skin = load_skin(default_skin);
     let func = Closure::<dyn FnMut(f64)>::new(|timestamp| -> () {
         info!("{timestamp:?}");
-        ()
     });
     window.request_animation_frame(func.as_ref().unchecked_ref())?;
     let config = Config {
@@ -63,6 +62,7 @@ pub async fn main() -> Result<(), JsValue> {
         lock_delay: (60, 300, 1200),
         ghost: true,
     };
+    std::mem::forget(func);
 
     let game = Game::new(config);
     info!("starting event loop");

@@ -1,4 +1,6 @@
-use std::{collections::VecDeque, time::Instant};
+use std::collections::VecDeque;
+
+use web_time::Instant;
 
 use crate::*;
 
@@ -160,7 +162,7 @@ impl Game {
             }
             Input(Restart | Quit) => unreachable!("should be handled in outer event loop"),
             // Input(Undo | Redo) => {
-            //     // this might make using instants impossible... if you undo you'd want to
+            //     // this might make using Instants impossible... if you undo you'd want to
             //     // also roll back the current time
             //     unreachable!("should be handled in outer event loop")
             // }

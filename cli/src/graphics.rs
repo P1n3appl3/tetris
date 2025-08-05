@@ -7,13 +7,14 @@ use std::{
         mpsc::RecvTimeoutError,
     },
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use anyhow::{Result, anyhow};
 use log::error;
 use termios::*;
 use tetris::{Cell, Game, GameState, Piece, Rotation};
+use web_time::Instant;
 
 macro_rules! csi {
     ($( $x:expr ),*) => { concat!("\x1b[", $( $x ),*) };

@@ -8,7 +8,7 @@ use std::{
     num::NonZeroU16,
     path::{Path, PathBuf},
     sync::mpsc,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use clap::{
@@ -21,6 +21,7 @@ use input::EventLoop;
 use log::{LevelFilter, debug, error};
 use rand::prelude::*;
 use tetris::{Event, Game, GameState, InputEvent, Sound, replay::Replay};
+use web_time::Instant;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -145,7 +146,7 @@ fn run_game(game: &mut Game, input: &EventLoop, player: &impl Sound, replay_dir:
                     if t < now {
                         game.timers.pop_front();
                         debug!(target: "timer","{timer_event:?}");
-                        game.handle(Event::Timer(timer_event), Instant::now(), player);
+                        game.handle(Event::Timer(timer_event), now, player);
                     }
                 }
             }
