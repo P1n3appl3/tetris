@@ -1,39 +1,32 @@
 #![allow(unused)]
 mod fps;
 mod skin;
-use std::array;
-use std::sync::mpsc::TryRecvError;
-use web_time::Instant;
 
+use std::cell::RefCell;
+use std::future;
+use std::rc::Rc;
+use std::{array, collections::HashMap};
+
+use futures::{
+    channel::mpsc::{self, TryRecvError},
+    prelude::*,
+};
 use log::info;
-use tetris::{Config, Game};
+use tetris::{Config, Event, Game, InputEvent, NullPlayer};
 use ultraviolet::DVec3;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::spawn_local;
 use web_time::Instant;
-
-struct NoTruePlayer;
-
-impl Sound for NoTruePlayer {
-    fn add_sound(&mut self, _name: &str, _resource: &str) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn set_volume(&mut self, _level: f32) {}
-
-    fn play(&self, _s: &str) -> anyhow::Result<()> {
-        Ok(())
-    }
-}
 
 #[wasm_bindgen]
 pub async fn main() -> Result<(), JsValue> {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
     wasm_logger::init(wasm_logger::Config::default());
-    let events = std::sync::mpsc::channel();
-    init_input_handlers(events.0)?;
-    info!("initializing");
+    info!("wasm blob initialized, running main...");
+    let (tx, mut rx) = mpsc::unbounded();
+    init_input_handlers(tx)?;
     let window = web_sys::window().unwrap();
-    // let document = window.document().expect("Could not get document");
+    let document = window.document().expect("Could not get document");
     let default_skin = "https://i.imgur.com/zjItrsg.png";
     let skin = skin::load_skin(default_skin);
     let board =
@@ -61,28 +54,31 @@ pub async fn main() -> Result<(), JsValue> {
     let mut game = Game::new(config);
     info!("starting event loop");
     let start_time = Instant::now();
-    loop {
-        raf_loop.next().await;
-        let fps = fps.tick();
-        let t = (Instant::now() - start_time).as_secs_f64();
-        timer_div.set_text_content(Some(&format!("{t:.2}")));
-        fps_div.set_text_content(Some(&format!("fps: {fps}")));
-        let (r, g, b) = fun_color(t / 10.0).into();
-        ctx.set_fill_style_str(&format!("rgb({r}, {g}, {b})"));
-        ctx.fill_rect(0.0, 0.0, hold.width() as f64, hold.height() as f64);
-    }
-    let keyboard_events = events.1;
-    loop {
-        match keyboard_events.try_recv() {
-            Ok(event) => {
-                let t = Instant::now();
-                game.handle(event, t, &NoTruePlayer);
-            }
-            Err(TryRecvError::Empty) => {}
-            Err(TryRecvError::Disconnected) => break,
+    let raf_fut = async {
+        loop {
+            raf_loop.next().await;
+            let fps = fps.tick();
+            let t = (Instant::now() - start_time).as_secs_f64();
+            timer_div.set_text_content(Some(&format!("{t:.2}")));
+            fps_div.set_text_content(Some(&format!("fps: {fps}")));
+            let (r, g, b) = fun_color(t / 10.0).into();
+            ctx.set_fill_style_str(&format!("rgb({r}, {g}, {b})"));
+            ctx.fill_rect(0.0, 0.0, hold.width() as f64, hold.height() as f64);
         }
-        // draw(game, skin);
-    }
+    };
+    let input_fut = async {
+        loop {
+            match rx.next().await {
+                Some(event) => {
+                    let t = Instant::now();
+                    game.handle(event, t, &NullPlayer);
+                }
+                None => break,
+            }
+            // draw(game, skin);
+        }
+    };
+    futures::future::join(raf_fut, input_fut).await;
     Ok(())
 }
 
@@ -106,34 +102,34 @@ pub fn draw(game: Game, skin: &skin::Skin) -> Result<(), JsValue> {
     Ok(())
 }
 
-fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
-    web_sys::console::log_1(&"initializing input handlers".into());
+fn init_input_handlers(events: mpsc::UnboundedSender<Event>) -> Result<(), JsValue> {
+    info!("initializing input handlers");
     let window = web_sys::window().expect("could not get window handle");
 
     let input = Rc::new(RefCell::new(window));
     use tetris::InputEvent::*;
+    let keymap = [
+        ("left", PressLeft),
+        ("right", PressRight),
+        ("down", PressSoft),
+        ("space", Hard),
+        ("f", Cw),
+        ("d", Ccw),
+        ("a", Flip),
+        ("s", Hold),
+        ("r", Restart),
+        ("q", Quit),
+    ]
+    .into_iter()
+    .collect::<HashMap<&'static str, InputEvent>>();
 
     let closure: Box<dyn FnMut(_)> = Box::new({
-        let events = events.clone();
-        let keymap = [
-            ("left", PressLeft),
-            ("right", PressRight),
-            ("down", PressSoft),
-            ("space", Hard),
-            ("f", Cw),
-            ("d", Ccw),
-            ("a", Flip),
-            ("s", Hold),
-            ("r", Restart),
-            ("q", Quit),
-        ]
-        .into_iter()
-        .collect::<HashMap<&'static str, InputEvent>>();
+        let mut events = events.clone();
         move |keydown: web_sys::KeyboardEvent| {
-            web_sys::console::log_1(&"got an event".into());
             let key = keydown.key();
+            info!("got an event: {key}");
             if let Some(&ev) = keymap.get(key.as_str()) {
-                events.send(Event::Input(ev)).unwrap();
+                events.send(Event::Input(ev.clone()));
             }
         }
     });

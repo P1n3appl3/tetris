@@ -208,6 +208,20 @@ pub trait Sound {
     fn play(&self, s: &str) -> Result<()>;
 }
 
+pub struct NullPlayer;
+
+impl Sound for NullPlayer {
+    fn add_sound(&mut self, _name: &str, _resource: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn set_volume(&mut self, _level: f32) {}
+
+    fn play(&self, _s: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
 impl TryFrom<InputEvent> for Spin {
     type Error = ();
 
