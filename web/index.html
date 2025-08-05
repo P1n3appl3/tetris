@@ -43,6 +43,19 @@
             margin-left: 10px;
             float: left;
         }
+        #board {
+            background: url(https://konsola5.github.io/jstris-customization-database/assets/jstris-grid.png);
+        }
+        #fps {
+            position: absolute;
+            top: 0;
+            left: 0;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            padding: 5px;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
         canvas {
             display: inline-block;
             background-color: blanchedalmond;
@@ -56,21 +69,15 @@
                 <canvas id="hold" width="96" height="96"></canvas>
             </div>
             <div id="center">
-                <canvas
-                    id="board"
-                    width="242"
-                    height="480"
-                    style="
-                        background: url(https://konsola5.github.io/jstris-customization-database/assets/jstris-grid.png);
-                    "
-                >
-                </canvas>
+                <canvas id="board" width="242" height="480"> </canvas>
+                <div id="timer">0.0</div>
             </div>
             <div id="right">
                 <canvas id="queue" width="96" height="360"></canvas>
                 <div id="right-info">lines remaining</div>
             </div>
         </div>
+        <div id="fps">fps: 0</div>
     </body>
     <div>
         <input type="text" id="skin-url" placeholder="Enter skin image url" />
