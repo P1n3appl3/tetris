@@ -2850,6 +2850,7 @@ dependencies = [
 name = "web"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "console_error_panic_hook",
  "futures",
  "getrandom 0.3.3",
