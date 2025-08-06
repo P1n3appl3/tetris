@@ -17,10 +17,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+log.workspace = true
 rand.workspace = true
 serde.workspace = true
 anyhow.workspace = true
-# TODO: rewrite this to use `performance.now()` on the web side
 web-time.workspace = true
 
 [dev-dependencies]

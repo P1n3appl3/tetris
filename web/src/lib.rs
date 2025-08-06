@@ -5,41 +5,40 @@ mod skin;
 use std::cell::RefCell;
 use std::future;
 use std::rc::Rc;
+use std::sync::mpsc::{self, Receiver, Sender, channel};
 use std::{array, collections::HashMap};
 
-use futures::{
-    channel::mpsc::{self, TryRecvError},
-    prelude::*,
-};
-use log::info;
-use tetris::{Config, Event, Game, InputEvent, NullPlayer};
+use futures::prelude::*;
+use log::{error, info};
+use tetris::{Cell, Config, Event, Game, GameState, InputEvent, NullPlayer};
 use ultraviolet::DVec3;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlDivElement, KeyboardEvent};
 use web_time::Instant;
+
+use crate::skin::Skin;
 
 #[wasm_bindgen]
 pub async fn main() -> Result<(), JsValue> {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
     wasm_logger::init(wasm_logger::Config::default());
     info!("wasm blob initialized, running main...");
-    let (tx, mut rx) = mpsc::unbounded();
+    let (tx, mut rx) = channel();
     init_input_handlers(tx)?;
     let window = web_sys::window().unwrap();
-    let document = window.document().expect("Could not get document");
+    let doc = window.document().expect("Could not get document");
     let default_skin = "https://i.imgur.com/zjItrsg.png";
-    let skin = skin::load_skin(default_skin);
-    let board =
-        document.get_element_by_id("board").unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
-    let hold =
-        document.get_element_by_id("hold").unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
-    let ctx = hold.get_context("2d")?.unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>()?;
-    let queue =
-        document.get_element_by_id("queue").unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
-    let timer_div =
-        document.get_element_by_id("timer").unwrap().dyn_into::<web_sys::HtmlDivElement>()?;
-    let fps_div =
-        document.get_element_by_id("fps").unwrap().dyn_into::<web_sys::HtmlDivElement>()?;
+    let skin = skin::load_skin(default_skin).await?;
+    let board = doc.get_element_by_id("board").unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
+    let hold = doc.get_element_by_id("hold").unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
+    let hold_cx: CanvasRenderingContext2d =
+        hold.get_context("2d")?.unwrap().dyn_into::<CanvasRenderingContext2d>()?;
+    let queue = doc.get_element_by_id("queue").unwrap().dyn_into::<HtmlCanvasElement>()?;
+    let timer_div = doc.get_element_by_id("timer").unwrap().dyn_into::<HtmlDivElement>()?;
+    let fps_div = doc.get_element_by_id("fps").unwrap().dyn_into::<HtmlDivElement>()?;
+    let right_info_div =
+        doc.get_element_by_id("right-info").unwrap().dyn_into::<HtmlDivElement>()?;
     let config = Config {
         das: 6,
         arr: 0,
@@ -54,25 +53,45 @@ pub async fn main() -> Result<(), JsValue> {
     let mut game = Game::new(config);
     info!("starting event loop");
     let start_time = Instant::now();
+    // TODO: timers
+    game.start(0xabad1d3a, &NullPlayer);
+    game.state = GameState::Running;
+
+    // TODO: eventually we wanna go back to separate event loops for inputs/drawing/timers,
+    // but for now this makes it easy to share game state between those
     let raf_fut = async {
         loop {
             raf_loop.next().await;
             let fps = fps.tick();
             let t = (Instant::now() - start_time).as_secs_f64();
             timer_div.set_text_content(Some(&format!("{t:.2}")));
+            if let Some(target) = game.target_lines {
+                right_info_div
+                    .set_text_content(Some(&format!("{}", target.saturating_sub(game.lines))));
+            }
             fps_div.set_text_content(Some(&format!("fps: {fps}")));
             let (r, g, b) = fun_color(t / 10.0).into();
-            ctx.set_fill_style_str(&format!("rgb({r}, {g}, {b})"));
-            ctx.fill_rect(0.0, 0.0, hold.width() as f64, hold.height() as f64);
+            hold_cx.set_fill_style_str(&format!("rgb({r}, {g}, {b})"));
+            hold_cx.fill_rect(0.0, 0.0, hold.width() as f64, hold.height() as f64);
+            // info!("iterating");
+            while let Ok(e) = rx.try_recv() {
+                use tetris::{Event::*, InputEvent::*};
+                match e {
+                    Input(Restart) => {
+                        game.start((t * 1000.0) as u64, &NullPlayer);
+                        break;
+                    }
+                    _ => {}
+                }
+                info!("handling: {e:?}");
+                let t = Instant::now();
+                game.handle(e, t, &NullPlayer);
+            }
+            draw_board(&game, &board, &skin);
+            draw_queue(&game, &queue, &skin, 8);
         }
     };
-    let input_fut = async {
-        while let Some(event) = rx.next().await {
-            let t = Instant::now();
-            game.handle(event, t, &NullPlayer);
-        }
-    };
-    futures::future::join(raf_fut, input_fut).await;
+    raf_fut.await;
     Ok(())
 }
 
@@ -85,32 +104,85 @@ pub fn fun_color(t: f64) -> DVec3 {
     a + b * (std::f64::consts::TAU * (c * t + d)).map(|f| f.cos()) * 256.0
 }
 
-pub fn draw(game: Game, skin: &skin::Skin) -> Result<(), JsValue> {
+pub fn draw_board(
+    game: &Game,
+    canvas: &HtmlCanvasElement,
+    skin: &skin::Skin,
+) -> Result<(), JsValue> {
     let window = web_sys::window().unwrap();
     let document = window.document().expect("Could not get document");
-    let canvas =
-        document.get_element_by_id("board").unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
-    let context =
-        canvas.get_context("2d")?.unwrap().dyn_into::<web_sys::CanvasRenderingContext2d>()?;
-    context.draw_image_with_image_bitmap(todo!(), 0.0, 0.0)?;
+    let cx = canvas.get_context("2d")?.unwrap().dyn_into::<CanvasRenderingContext2d>()?;
+    cx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
+    let border_width = 1.0;
+    let mino_size = 24.0;
+    let ghost_alpha = 0.5; //TODO: slider
+    for y in 0..20 {
+        for x in 0..10 {
+            if let Some(mut sprite) = skin::skindex(game.board[y][x]).map(|i| &skin[i]) {
+                if game.state != GameState::Running {
+                    sprite = &skin[0];
+                }
+                cx.draw_image_with_image_bitmap(
+                    sprite,
+                    x as f64 * mino_size + border_width,
+                    (20 - y) as f64 * mino_size + border_width,
+                )?;
+            }
+        }
+    }
+    // only draw ghost while game is running
+    if game.state != GameState::Running {
+        return Ok(());
+    }
+    cx.set_global_alpha(ghost_alpha);
+    let (piece, pos, rot) = game.current;
+    for (x, y) in piece.get_pos(rot, pos) {
+        let mut sprite = skin::skindex(Cell::Piece(piece)).map(|i| &skin[i]).unwrap();
+        if game.state != GameState::Running {
+            sprite = &skin[0];
+        }
+        cx.draw_image_with_image_bitmap(
+            sprite,
+            x as f64 * mino_size + border_width,
+            (20 - y) as f64 * mino_size + border_width,
+        )?;
+    }
+    Ok(())
+}
+pub fn draw_queue(
+    game: &Game,
+    canvas: &HtmlCanvasElement,
+    skin: &skin::Skin,
+    depth: usize,
+) -> Result<(), JsValue> {
+    let window = web_sys::window().unwrap();
+    let document = window.document().expect("Could not get document");
+    let cx = canvas.get_context("2d")?.unwrap().dyn_into::<CanvasRenderingContext2d>()?;
+    // cx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
+    cx.set_fill_style_str("rgb(1, 240, 3)");
+    cx.fill_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
+    let border_width = 1.0;
+    let mino_size = 24.0;
+    for i in 0..9 {
+        cx.draw_image_with_image_bitmap(&skin[i], 20.0, i as f64 * 24.0 + 20.0)?;
+    }
     Ok(())
 }
 
-fn init_input_handlers(events: mpsc::UnboundedSender<Event>) -> Result<(), JsValue> {
+fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
     info!("initializing input handlers");
     let window = web_sys::window().expect("could not get window handle");
 
-    let input = Rc::new(RefCell::new(window));
     use tetris::InputEvent::*;
     let keymap = [
-        ("left", PressLeft),
-        ("right", PressRight),
-        ("down", PressSoft),
-        ("space", Hard),
+        ("j", PressLeft),
+        ("l", PressRight),
+        ("k", PressSoft),
+        (" ", Hard),
         ("f", Cw),
         ("d", Ccw),
-        ("a", Flip),
-        ("s", Hold),
+        ("a", Hold),
+        ("s", Flip),
         ("r", Restart),
         ("q", Quit),
     ]
@@ -119,20 +191,20 @@ fn init_input_handlers(events: mpsc::UnboundedSender<Event>) -> Result<(), JsVal
 
     let closure: Box<dyn FnMut(_)> = Box::new({
         let mut events = events.clone();
-        move |keydown: web_sys::KeyboardEvent| {
+        move |keydown: KeyboardEvent| {
             let key = keydown.key();
-            info!("got an event: {key}");
             if let Some(&ev) = keymap.get(key.as_str()) {
-                events.send(Event::Input(ev));
+                info!("sent an event: {key} -> {ev:?}");
+                events.clone().send(Event::Input(ev));
+            } else {
+                info!("'{key}' didn't match");
             }
         }
     });
 
     let closure = Closure::wrap(closure);
 
-    input
-        .borrow_mut()
-        .add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref())?;
+    window.add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref())?;
     closure.forget();
 
     Ok(())

@@ -3,66 +3,10 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="stylesheet" href="./style.css" />
         <link rel="icon" type="image/png" href="./icon.png" />
         <title>yay it works</title>
     </head>
-    <style>
-        html {
-            background-color: rgb(17, 17, 17);
-            color: lavenderblush;
-            /*TODO: ship a font*/
-            font-family:
-                Noto Sans,
-                sans;
-        }
-
-        body {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            gap: 20px;
-        }
-        #main {
-            float: left;
-            position: relative;
-            flex-direction: row;
-            width: 500px;
-            transform: translate(0px);
-        }
-        #left {
-            margin-right: 10px;
-            float: left;
-        }
-        #center {
-            float: left;
-        }
-        #right {
-            margin-left: 10px;
-            float: left;
-        }
-        #board {
-            background: url(https://konsola5.github.io/jstris-customization-database/assets/jstris-grid.png);
-        }
-        #fps {
-            position: absolute;
-            bottom: 0;
-            right: 0;
-            color: mediumaquamarine;
-            font-size: 10px;
-        }
-        #stats {
-            text-align: center;
-        }
-        canvas {
-            display: inline-block;
-            background-color: blanchedalmond;
-            /*image-rendering: pixelated;
-            image-rendering: crisp-edges*/
-        }
-    </style>
     <body>
         <div id="main">
             <div id="left">
@@ -76,7 +20,7 @@
             </div>
             <div id="right">
                 <canvas id="queue" width="96" height="360"></canvas>
-                <div id="right-info">lines remaining</div>
+                <div id="right-info"></div>
             </div>
         </div>
         <div id="fps">fps: 0</div>
@@ -87,13 +31,10 @@
     </div>
     <script type="module">
         import init, { main } from "./pkg/web.js";
-
         async function run() {
             await init();
             await main();
         }
-
         run();
-        console.log("ran");
     </script>
 </html>

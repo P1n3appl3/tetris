@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+use log::info;
 use web_time::Instant;
 
 use crate::*;
@@ -72,6 +73,7 @@ impl Game {
     pub fn handle(&mut self, event: Event, time: Instant, player: &impl Sound) {
         use {Event::*, GameState::*, InputEvent::*, TimerEvent::*};
         self.time = time;
+        info!("handling input: {event:?}");
         match event {
             Input(PressLeft) => {
                 if self.state == Running && self.try_move((-1, 0)) {
