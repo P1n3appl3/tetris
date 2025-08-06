@@ -171,6 +171,42 @@ pub fn draw_queue(
     Ok(())
 }
 
+trait Color {
+    fn color(self) -> (u8, u8, u8);
+}
+
+impl Color for Piece {
+    fn color(self) -> (u8, u8, u8) {
+        match self {
+            Piece::I => (15, 155, 215),
+            Piece::J => (33, 65, 198),
+            Piece::L => (227, 91, 2),
+            Piece::O => (227, 159, 2),
+            Piece::S => (89, 177, 1),
+            Piece::T => (175, 41, 138),
+            Piece::Z => (215, 15, 55),
+        }
+    }
+}
+
+fn draw_piece(
+    ctx: &CanvasRenderingContext2d,
+    piece: Piece,
+    origin: (i16, i16),
+) -> anyhow::Result<()> {
+    let pos = piece.get_pos(Rotation::North, (origin.0 as i8, origin.1 as i8));
+    let (x, y) = origin;
+    for p in pos {
+        info!("{p:?}");
+        let (r, g, b) = piece.color();
+        ctx.set_fill_style_str(&format!("rgb({r}, {g}, {b})"));
+        let x = x + (p.0 as i16) * 10;
+        let y = y + (p.1 as i16) * 10;
+        ctx.fill_rect(x as _, y as _, 10.0, 10.0);
+    }
+    Ok(())
+}
+
 fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
     info!("initializing input handlers");
     let window = web_sys::window().expect("could not get window handle");
@@ -199,10 +235,8 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
             }
             let key = keydown.key();
             if let Some(&ev) = keymap.get(key.as_str()) {
-                info!("sent an event: {key} -> {ev:?}");
-                events.clone().send(Event::Input(ev));
-            } else {
-                info!("'{key}' didn't match");
+                info!("got a keydown event: {key}");
+                events.send(Event::Input(ev));
             }
         }
     });
@@ -210,6 +244,32 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
     let closure = Closure::wrap(closure);
 
     window.add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref())?;
+    closure.forget();
+
+    let window = web_sys::window().expect("could not get window handle");
+    let input = Rc::new(RefCell::new(window));
+    use tetris::InputEvent::*;
+    let keymap =
+        [("ArrowLeft", ReleaseLeft), ("ArrowRight", ReleaseRight), ("ArrowDown", ReleaseSoft)]
+            .into_iter()
+            .collect::<HashMap<&'static str, InputEvent>>();
+
+    let closure: Box<dyn FnMut(_)> = Box::new({
+        let mut events = events.clone();
+        move |keydown: web_sys::KeyboardEvent| {
+            let key = keydown.key();
+            if let Some(&ev) = keymap.get(key.as_str()) {
+                info!("got a keyup event: {key}");
+                events.send(Event::Input(ev));
+            }
+        }
+    });
+
+    let closure = Closure::wrap(closure);
+
+    input
+        .borrow_mut()
+        .add_event_listener_with_callback("keyup", closure.as_ref().unchecked_ref())?;
     closure.forget();
 
     Ok(())
