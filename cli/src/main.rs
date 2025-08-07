@@ -20,7 +20,7 @@ use graphics::RawMode;
 use input::EventLoop;
 use log::{LevelFilter, debug, error};
 use rand::prelude::*;
-use tetris::{Event, Game, GameState, InputEvent, Sound, replay::Replay};
+use tetris::{Event, Game, GameState, InputEvent, replay::Replay, sound::Sink};
 use web_time::Instant;
 
 /// Simple program to greet a person
@@ -81,8 +81,9 @@ fn main() {
             }
         }
     };
-    let mut player = sound::RodioPlayer::new(&dirs).expect("Failed to initialize audio engine");
+    let mut player = sound::Rodio::new(&dirs).expect("Failed to initialize audio engine");
     let (config, keys) = settings::load(&settings, &mut player).expect("Invalid settings file");
+    return;
     let _mode = RawMode::enter();
     let input = EventLoop::start(keys);
     let mut game = Game::new(config);
@@ -96,7 +97,7 @@ fn main() {
     while run_game(&mut game, &input, &player, &replay_dir) {}
 }
 
-fn run_game(game: &mut Game, input: &EventLoop, player: &impl Sound, replay_dir: &Path) -> bool {
+fn run_game(game: &mut Game, input: &EventLoop, player: &impl Sink, replay_dir: &Path) -> bool {
     let (width, height) = get_size();
     if width < 40 || height < 22 {
         panic!("screen too small");

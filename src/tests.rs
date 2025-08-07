@@ -122,7 +122,7 @@ where
     assert_eq!(events.len(), f.pages.len() - 1);
     for (i, (events, page)) in events.zip(f.pages[1..].iter()).enumerate() {
         for e in events.into_iter() {
-            g.handle(e.into(), t, &NullPlayer);
+            g.handle(e.into(), t, &sound::NullSink);
         }
         assert_eq!(
             render(get_board(page), get_piece(page)),

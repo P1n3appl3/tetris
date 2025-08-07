@@ -28,7 +28,7 @@ config {
     das 6
     arr 0
     gravity 60
-    soft_drop 1
+    soft-drop 1
     ghost #true
     // these mirror the 3 jstris lock delays
     lock 30
@@ -37,7 +37,7 @@ config {
 }
 
 // these settings are closer to a standard guideline tetris game:
-// config {das 10; arr 2; gravity 60; soft_drop 4; ghost true; lock_delay 30 300 1200;}
+// config {das 10; arr 2; gravity 60; soft-drop 4; ghost true; lock_delay 30 300 1200;}
 
 // TODO: implement line clear delay and ARE
 // TODO: add tetris 99 example config (12f das, 2f arr, 6f are)
@@ -45,13 +45,19 @@ config {
 
 sound {
     volume 0.3
-    ready #null
-    move "https://s.jezevec10.com/res/se0/move.wav"
-    rotate #null
-    lock "https://s.jezevec10.com/res/se0/lock.wav"
-    line "https://s.jezevec10.com/res/se0/linefall.wav"
-    hold "https://s.jezevec10.com/res/se0/hold.wav"
-    lose "https://s.jezevec10.com/res/se0/topout.wav"
-    // win "path/to/win.wav"
-    go #null
+    meta {
+        ready #null
+        go #null
+        lose "https://s.jezevec10.com/res/se0/topout.wav"
+        // win "path/to/win.wav"
+    }
+    action {
+        move "https://s.jezevec10.com/res/se0/move.wav"
+        rotate #null
+        lock "https://s.jezevec10.com/res/se0/lock.wav"
+        hold "https://s.jezevec10.com/res/se0/hold.wav"
+    }
+    clear {
+        single "https://s.jezevec10.com/res/se0/linefall.wav"
+    }
 }

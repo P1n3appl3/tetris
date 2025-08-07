@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-rodio = "0.20"
+rodio = "0.21"
 termios = "0.3"
 ftail = "0.3"
 libc = "0.2"
@@ -23,6 +23,7 @@ log.workspace = true
 anyhow.workspace = true
 rand.workspace = true
 web-time.workspace = true
+strum.workspace = true
 
 [features]
 default = ["url-assets"]

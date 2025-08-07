@@ -1,29 +1,23 @@
 use anyhow::{Context, Result};
 use kdl::{KdlDocument, KdlNode, KdlValue};
-use tetris::{Bindings, Config, Sound};
+use strum::EnumString;
+use tetris::{Bindings, Config, sound::Sink};
 
-// TODO: make it an enum
-// TODO: add sounds:
-// combo (auto generate?), combo break
-// quad, b2b, spin-clear, maybe make those all just one sound for like "fancy
-// line". soft drop? hit floor?
-// perfect clear
-// separate lock/harddrop
-const SOUNDS: &[&str] = &["start", "move", "rotate", "spin", "lock", "line", "hold", "lose", "win"];
+use crate::sound::Rodio;
 
-pub fn load(raw: &str, player: &mut impl Sound) -> Result<(Config, Bindings)> {
+// TODO: make this declarative
+pub fn load(raw: &str, player: &mut Rodio) -> Result<(Config, Bindings)> {
     let doc: KdlDocument = raw.parse()?;
     let get_node =
         |name| doc.get(name).and_then(KdlNode::children).context(format!("missing {name} node"));
     let config_node = get_node("config")?;
-    let sound_node = get_node("sound")?;
     let bindings_node = get_node("bindings")?;
 
     let config = Config {
         das: get_config("das", config_node)? as u16,
         arr: get_config("arr", config_node)? as u16,
         gravity: get_config("gravity", config_node)? as u16,
-        soft_drop: get_config("soft_drop", config_node)? as u16,
+        soft_drop: get_config("soft-drop", config_node)? as u16,
         lock_delay: (
             get_config("lock", config_node)? as u16,
             get_config("extended", config_node)? as u16,
@@ -41,18 +35,32 @@ pub fn load(raw: &str, player: &mut impl Sound) -> Result<(Config, Bindings)> {
         flip: get_binding("flip", bindings_node)?,
         hold: get_binding("hold", bindings_node)?,
     };
-    if let Some(f) = sound_node.get_arg("volume").and_then(KdlValue::as_float) {
-        player.set_volume(f as f32);
-    }
-    for sound in SOUNDS {
-        if let Some(s) = sound_node.get_arg(sound).and_then(KdlValue::as_string) {
-            if let Err(e) = player.add_sound(sound, s) {
-                log::error!("Failed to load sound {sound} from {s}: {e}");
-            } else {
-                log::info!("Loaded sound {sound} from {s}");
+
+    if let Ok(sound_node) = get_node("sound") {
+
+        if let Some(f) = sound_node.get_arg("volume").and_then(KdlValue::as_float) {
+            player.set_volume(f as f32);
+        }
+        if let Some(meta) = sound_node.get("meta") {
+            for entry in meta.iter_children() {
+                println!("{entry:?}")
+                // entry.name()
+                    // entry.get(1);
+                // entry.entries()
             }
+            // meta.into_iter().map(|n| n.); n.)
+
         }
     }
+    // for sound in SOUNDS {
+    //     if let Some(s) = sound_node.get_arg(sound).and_then(KdlValue::as_string) {
+    //         if let Err(e) = player.add_sound(sound, s) {
+    //             log::error!("Failed to load sound {sound} from {s}: {e}");
+    //         } else {
+    //             log::info!("Loaded sound {sound} from {s}");
+    //         }
+    //     }
+    // }
     Ok((config, bindings))
 }
 

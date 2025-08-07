@@ -5,17 +5,18 @@ use directories::ProjectDirs;
 use rodio::{
     Decoder, OutputStream, OutputStreamHandle, source::Source, static_buffer::StaticSamplesBuffer,
 };
+use tetris::sound::Sound;
 
-pub struct RodioPlayer {
+pub struct Rodio {
     pub volume: f32,
     _stream: OutputStream,
     handle: OutputStreamHandle,
-    sounds: HashMap<String, StaticSamplesBuffer<f32>>,
+    sounds: HashMap<Sound, StaticSamplesBuffer<f32>>,
     #[cfg(feature = "url-assets")]
     cache: cached_path::Cache,
 }
 
-impl RodioPlayer {
+impl Rodio {
     pub fn new(dirs: &ProjectDirs) -> Result<Self> {
         let (_stream, handle) = OutputStream::try_default()?;
 
@@ -36,10 +37,11 @@ impl RodioPlayer {
     }
 }
 
-impl tetris::Sound for RodioPlayer {
-    fn add_sound(&mut self, name: &str, filename: &str) -> Result<()> {
+impl tetris::sound::Sink for Rodio {
+    type Asset<'a> = &'a str;
+    fn add_sound<T>(&mut self, sound: T, filename: Self::Asset<'_>) -> Result<()> {
         #[cfg(feature = "url-assets")]
-        let filename = self.cache.cached_path(filename)?;
+        let filename = self.cache.cached_path(&filename)?;
 
         let decoder = Decoder::new(BufReader::new(File::open(filename)?))?;
         let (channels, rate, samples) = (
@@ -47,12 +49,12 @@ impl tetris::Sound for RodioPlayer {
             decoder.sample_rate(),
             decoder.convert_samples().collect::<Vec<_>>().leak(),
         );
-        self.sounds.insert(name.to_owned(), StaticSamplesBuffer::new(channels, rate, samples));
+        self.sounds.insert(sound.into(), StaticSamplesBuffer::new(channels, rate, samples));
         Ok(())
     }
 
-    fn play(&self, s: &str) -> Result<()> {
-        if let Some(sound) = self.sounds.get(s) {
+    fn play<T>(&self, s: T) -> Result<()> {
+        if let Some(sound) = self.sounds.get(s.into()) {
             // TODO: cloning the sound on every seems bad. even if volume is dynamic it
             // should probably cache the amplified sounds
             Ok(self.handle.play_raw(sound.clone().amplify(self.volume))?)

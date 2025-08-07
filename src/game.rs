@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use log::info;
 use web_time::Instant;
 
-use crate::*;
+use crate::{sound::Sink, *};
 
 pub type Board = [[Cell; 10]; 50]; // hope no one stacks higher than this 👀
 
@@ -51,7 +51,7 @@ impl Game {
         }
     }
 
-    pub fn start(&mut self, seed: u64, player: &impl Sound) {
+    pub fn start(&mut self, seed: u64, player: &impl Sink) {
         self.state = GameState::Startup;
         self.board = [[Cell::Empty; 10]; 50];
         self.hold = None;
@@ -63,21 +63,21 @@ impl Game {
         while let Some(Piece::Z | Piece::S) = self.upcomming.front() {
             self.pop_piece();
         }
-        player.play("start").ok();
+        player.play(sound::Meta::Go).ok();
         // TODO: combine "ready" and "go" sounds
         // TODO: make startup time configurable
         self.timers.clear();
         self.set_timer(TimerEvent::Start);
     }
 
-    pub fn handle(&mut self, event: Event, time: Instant, player: &impl Sound) {
+    pub fn handle(&mut self, event: Event, time: Instant, audio: &impl Sink) {
         use {Event::*, GameState::*, InputEvent::*, TimerEvent::*};
         self.time = time;
         info!("handling input: {event:?}");
         match event {
             Input(PressLeft) => {
                 if self.state == Running && self.try_move((-1, 0)) {
-                    player.play("move").ok();
+                    player.play(sound::Action::Move).ok();
                 }
                 self.started_left = Some(time);
                 self.clear_timer(DasRight);
@@ -86,7 +86,7 @@ impl Game {
             }
             Input(PressRight) => {
                 if self.state == Running && self.try_move((1, 0)) {
-                    player.play("move").ok();
+                    player.play(sound::Action::Move).ok();
                 }
                 self.started_right = Some(time);
                 self.clear_timer(DasLeft);
@@ -120,17 +120,17 @@ impl Game {
             Input(Hold) => {
                 if self.can_hold {
                     if !self.hold() {
-                        player.play("lose").ok();
+                        player.play(sound::Meta::Lose).ok();
                         self.state = Done;
                         self.end_time = Some(self.time);
                         self.timers.clear();
                     } else {
-                        player.play("hold").ok();
+                        player.play(sound::Action::Hold).ok();
                         self.can_hold = false;
                     }
                 } else {
                     // TODO: add failed hold sound
-                    player.play("nohold").ok();
+                    player.play(sound::Action::NoHold).ok();
                 }
             }
             Input(Hard) | Timer(Lock | Extended | Timeout) => self.hard_drop(player),
@@ -148,7 +148,7 @@ impl Game {
             }
             Input(rot @ (Cw | Ccw | Flip)) => {
                 if self.try_rotate(rot.try_into().expect("should always be a rotation")) {
-                    player.play("rotate").ok();
+                    player.play(sound::Action::Rotate).ok();
                 }
                 // confirmed: jstris resets it even if you don't successfully rotate
                 self.clear_timer(Lock);
@@ -210,22 +210,22 @@ impl Game {
         self.timers.retain(|&(_, ev)| ev != t)
     }
 
-    fn hard_drop(&mut self, player: &impl Sound) {
+    fn hard_drop(&mut self, player: &impl Sink) {
         while self.try_drop() {}
         let old_lines = self.lines;
         // TODO: redo with "piece placement result struct"
         if self.lock() {
             if self.lines == old_lines {
-                player.play("lock").ok();
+                player.play(sound::Action::Lock).ok();
             } else if self.lines < self.target_lines.unwrap_or(u16::MAX) {
-                player.play("line").ok();
+                player.play(sound::Action::HardDrop).ok();
             } else {
                 // TODO: maybe just play both at the same time?
-                player.play("win").or_else(|_| player.play("lock")).ok();
+                player.play(sound::Meta::Win).or_else(|_| player.play(sound::Clear::Single)).ok();
                 self.finish();
             }
         } else {
-            player.play("lose").ok();
+            player.play(sound::Meta::Lose).ok();
             self.finish();
         }
     }
@@ -285,6 +285,7 @@ impl Game {
         }
     }
 
+    // TODO: return bool for whether it moved to trigger sound
     fn handle_das(&mut self) {
         let t = self.time;
         let threshold = FRAME * self.config.das as u32;

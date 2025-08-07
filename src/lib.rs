@@ -1,14 +1,16 @@
 mod game;
 pub mod replay;
+pub mod sound;
 #[cfg(test)]
 mod tests;
 
 use std::time::Duration;
 
 use anyhow::Result;
-pub use game::Game;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
+
+pub use game::Game;
 
 pub type Pos = [(i8, i8); 4];
 
@@ -100,6 +102,7 @@ const FRAME: Duration = Duration::from_nanos(16_666_667);
 // TODO: make all these floats (maybe ms instead of frames?)
 // TODO: find jstris softdrop delays and match them
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Config {
     pub das: u16,
     pub arr: u16,
@@ -197,28 +200,6 @@ impl Piece {
             O => Default::default(),
             _ => ROTJLSTZ[idx],
         }
-    }
-}
-
-pub trait Sound {
-    // TODO: asyncify this to lazy-load sounds while playing
-    // TODO: handle url instead of just path, download to cache
-    fn add_sound(&mut self, name: &str, resource: &str) -> Result<()>;
-    fn set_volume(&mut self, level: f32);
-    fn play(&self, s: &str) -> Result<()>;
-}
-
-pub struct NullPlayer;
-
-impl Sound for NullPlayer {
-    fn add_sound(&mut self, _name: &str, _resource: &str) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn set_volume(&mut self, _level: f32) {}
-
-    fn play(&self, _s: &str) -> anyhow::Result<()> {
-        Ok(())
     }
 }
 
