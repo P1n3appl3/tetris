@@ -203,6 +203,38 @@ impl Piece {
     }
 }
 
+pub const BG_COLOR: (u8, u8, u8) = (20, 20, 20);
+// const DONE_COLOR: (u8, u8, u8) = (106, 106, 106);
+pub const LOST_COLOR: (u8, u8, u8) = (106, 106, 106); // TODO: differentiate from DONE
+
+pub trait Color {
+    fn color(self) -> (u8, u8, u8);
+}
+
+impl Color for Piece {
+    fn color(self) -> (u8, u8, u8) {
+        match self {
+            Piece::I => (15, 155, 215),
+            Piece::J => (33, 65, 198),
+            Piece::L => (227, 91, 2),
+            Piece::O => (227, 159, 2),
+            Piece::S => (89, 177, 1),
+            Piece::T => (175, 41, 138),
+            Piece::Z => (215, 15, 55),
+        }
+    }
+}
+
+impl Color for Cell {
+    fn color(self) -> (u8, u8, u8) {
+        match self {
+            Cell::Piece(piece) => piece.color(),
+            Cell::Garbage => LOST_COLOR,
+            Cell::Empty => (0, 0, 0),
+        }
+    }
+}
+
 impl TryFrom<InputEvent> for Spin {
     type Error = ();
 
