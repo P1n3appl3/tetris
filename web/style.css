@@ -6,7 +6,6 @@ html {
         Noto Sans,
         sans;
 }
-
 body {
     display: flex;
     flex-direction: column;
@@ -15,6 +14,19 @@ body {
     min-height: 100vh;
     margin: 0;
     gap: 20px;
+}
+canvas {
+    display: inline-block;
+    background-color: blanchedalmond;
+    /*image-rendering: pixelated;
+    image-rendering: crisp-edges*/
+}
+details {
+    display: block;
+    margin-bottom: 10px;
+}
+a {
+    color: #8cb4ff;
 }
 #main {
     float: left;
@@ -47,9 +59,42 @@ body {
 #stats {
     text-align: center;
 }
-canvas {
-    display: inline-block;
-    background-color: blanchedalmond;
-    /*image-rendering: pixelated;
-    image-rendering: crisp-edges*/
+/*TODO: put this at the bottom instead of the right if it doesn't fit*/
+.settings {
+    width: 250px;
+    position: fixed;
+    z-index: 1;
+    top: 0;
+    left: 0;
+    background-color: #111;
+    overflow-x: hidden;
+    padding: 5px;
+    margin-top: 60px;
+    /*transition: 0.5s;*/
+    display: flex;
+    flex-direction: column;
+    /*border: 1px dashed white;*/
+}
+
+.settings details {
+    padding: 5px;
+    border: 1px solid white;
+}
+
+.settings details > div {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 0;
+    border: white;
+}
+
+.settings label {
+    display: flex;
+    gap: 5px;
+}
+
+.settings input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
 }

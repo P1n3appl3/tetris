@@ -25,9 +25,53 @@
         </div>
         <div id="fps">fps: 0</div>
     </body>
-    <div>
-        <input type="text" id="skin-url" placeholder="Enter skin image url" />
-        <button>load</button>
+    <div class="settings">
+        <details><summary>keybinds</summary></details>
+        <details><summary>gameplay</summary></details>
+        <details>
+            <summary>graphics</summary>
+            <div>
+                <button>status</button>
+                <input
+                    type="url"
+                    id="skin-url"
+                    placeholder="Skin image url"
+                    value="https://i.imgur.com/zjItrsg.png"
+                />
+            </div>
+            find skins
+            <a
+                target="_blank"
+                href="https://konsola5.github.io/jstris-customization-database"
+            >
+                here
+            </a>
+            <hr />
+            <label
+                >grid:
+                <select name="grid" id="grid-select">
+                    <option value="partial">Partial</option>
+                    <option value="dotted">Dotted</option>
+                    <option value="full">Full</option>
+                    <option value="dots">dots</option>
+                    <option value="pluses">pluses</option>
+                    <option value="none">none</option>
+                </select>
+            </label>
+            <label>opacity <input type="range" /></label>
+            <hr />
+            ghost:
+            <select name="ghost" id="ghost-select">
+                <option value="skin">Skin</option>
+                <option value="outline">Outline</option>
+                <option value="mino-outline">Mino Outline</option>
+                <option value="none">none</option>
+            </select>
+            <label>opacity <input type="range" /></label>
+        </details>
+        <details>
+            <summary>sound</summary>
+        </details>
     </div>
     <script type="module">
         import init, { main } from "./pkg/web.js";
