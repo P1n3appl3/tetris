@@ -4,7 +4,10 @@ use fumen::{CellColor, Fumen, PieceType, RotationState};
 
 // use pretty_assertions::assert_eq;
 use super::{InputEvent::*, *};
-use crate::Event;
+use crate::{
+    Event,
+    sound::{NullSink, SoundPlayer},
+};
 
 impl From<PieceType> for Piece {
     fn from(value: PieceType) -> Self {
@@ -122,7 +125,7 @@ where
     assert_eq!(events.len(), f.pages.len() - 1);
     for (i, (events, page)) in events.zip(f.pages[1..].iter()).enumerate() {
         for e in events.into_iter() {
-            g.handle(e.into(), t, &sound::NullSink);
+            g.handle(e.into(), t, &SoundPlayer::<NullSink>::default());
         }
         assert_eq!(
             render(get_board(page), get_piece(page)),

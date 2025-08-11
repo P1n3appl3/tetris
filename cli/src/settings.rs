@@ -1,17 +1,46 @@
+use std::{fs, path::Path, str::FromStr};
+
 use anyhow::{Context, Result};
-use kdl::{KdlDocument, KdlNode, KdlValue};
-use strum::EnumString;
-use tetris::{Bindings, Config, sound::Sink};
+use directories::ProjectDirs;
+use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
+use tetris::{
+    Bindings, Config,
+    sound::{Action, Clear, Meta, Sink, SoundPlayer},
+};
 
 use crate::sound::Rodio;
 
-// TODO: make this declarative
-pub fn load(raw: &str, player: &mut Rodio) -> Result<(Config, Bindings)> {
+pub fn load(
+    path: Option<&Path>,
+    dirs: &ProjectDirs,
+    sound: &mut SoundPlayer<Rodio>,
+) -> Result<(Config, Bindings)> {
+    let raw = if let Some(path) = path {
+        fs::read_to_string(path).expect("Couldn't read settings file")
+    } else {
+        let default_settings_content = include_str!("../settings.kdl");
+        fs::create_dir_all(dirs.config_dir()).ok();
+        let settings_path = dirs.config_dir().join("settings.kdl");
+        match fs::read_to_string(&settings_path) {
+            Ok(s) => s,
+            Err(_) => {
+                fs::write(settings_path, default_settings_content).ok();
+                default_settings_content.to_owned()
+            }
+        }
+    };
+
     let doc: KdlDocument = raw.parse()?;
     let get_node =
         |name| doc.get(name).and_then(KdlNode::children).context(format!("missing {name} node"));
     let config_node = get_node("config")?;
     let bindings_node = get_node("bindings")?;
+
+    #[cfg(feature = "url-assets")]
+    let cache = cached_path::CacheBuilder::new()
+        .dir(dirs.cache_dir().to_path_buf())
+        .client_builder(reqwest::blocking::ClientBuilder::new().user_agent("tetris"))
+        .build()?;
 
     let config = Config {
         das: get_config("das", config_node)? as u16,
@@ -37,30 +66,59 @@ pub fn load(raw: &str, player: &mut Rodio) -> Result<(Config, Bindings)> {
     };
 
     if let Ok(sound_node) = get_node("sound") {
-
         if let Some(f) = sound_node.get_arg("volume").and_then(KdlValue::as_float) {
-            player.set_volume(f as f32);
+            sound.sink.set_volume(f);
         }
+        // TODO: dedup
         if let Some(meta) = sound_node.get("meta") {
-            for entry in meta.iter_children() {
-                println!("{entry:?}")
-                // entry.name()
-                    // entry.get(1);
-                // entry.entries()
+            for node in meta.iter_children() {
+                let path =
+                    node.entries().first().map(KdlEntry::value).and_then(KdlValue::as_string);
+                #[cfg(feature = "url-assets")]
+                let path = path.and_then(|p| cache.cached_path(p).ok());
+                if let Some(path) = path
+                    && let Ok(variant) = Meta::from_str(node.name().value()).map(Into::into)
+                    && let Ok(decoded) = Rodio::decode(&path)
+                {
+                    sound.sounds.insert(variant, decoded);
+                } else {
+                    log::warn!("failed to load sound for '{}'", node.name().value())
+                }
             }
-            // meta.into_iter().map(|n| n.); n.)
-
+        }
+        if let Some(meta) = sound_node.get("action") {
+            for node in meta.iter_children() {
+                let path =
+                    node.entries().first().map(KdlEntry::value).and_then(KdlValue::as_string);
+                #[cfg(feature = "url-assets")]
+                let path = path.and_then(|p| cache.cached_path(p).ok());
+                if let Some(path) = path
+                    && let Ok(variant) = Action::from_str(node.name().value()).map(Into::into)
+                    && let Ok(decoded) = Rodio::decode(&path)
+                {
+                    sound.sounds.insert(variant, decoded);
+                } else {
+                    log::warn!("failed to load sound for '{}'", node.name().value())
+                }
+            }
+        }
+        if let Some(meta) = sound_node.get("clear") {
+            for node in meta.iter_children() {
+                let path =
+                    node.entries().first().map(KdlEntry::value).and_then(KdlValue::as_string);
+                #[cfg(feature = "url-assets")]
+                let path = path.and_then(|p| cache.cached_path(p).ok());
+                if let Some(path) = path
+                    && let Ok(variant) = Clear::from_str(node.name().value()).map(Into::into)
+                    && let Ok(decoded) = Rodio::decode(&path)
+                {
+                    sound.sounds.insert(variant, decoded);
+                } else {
+                    log::warn!("failed to load sound for '{}'", node.name().value())
+                }
+            }
         }
     }
-    // for sound in SOUNDS {
-    //     if let Some(s) = sound_node.get_arg(sound).and_then(KdlValue::as_string) {
-    //         if let Err(e) = player.add_sound(sound, s) {
-    //             log::error!("Failed to load sound {sound} from {s}: {e}");
-    //         } else {
-    //             log::info!("Loaded sound {sound} from {s}");
-    //         }
-    //     }
-    // }
     Ok((config, bindings))
 }
 
@@ -100,7 +158,15 @@ fn get_key(name: &str) -> Option<char> {
         "down" => DOWN,
         "shift" => LEFT_SHIFT,
         "space" => ' ',
-        _ => return None,
+        s => {
+            if let Some(c) = s.chars().next()
+                && s.chars().count() == 1
+            {
+                c
+            } else {
+                return None;
+            }
+        }
     })
 }
 
@@ -109,11 +175,5 @@ fn get_binding(name: &str, bindings: &KdlDocument) -> Result<char> {
         .get_arg(name)
         .and_then(KdlValue::as_string)
         .context(format!("need a binding for '{name}'"))
-        .and_then(|s| {
-            if s.chars().count() == 1 {
-                Ok(s.chars().next().unwrap())
-            } else {
-                get_key(s).context(format!("invalid key name '{s}' for '{name}' binding"))
-            }
-        })
+        .and_then(|s| get_key(s).context(format!("invalid key name '{s}' for '{name}' binding")))
 }

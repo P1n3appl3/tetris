@@ -20,7 +20,11 @@ use graphics::RawMode;
 use input::EventLoop;
 use log::{LevelFilter, debug, error};
 use rand::prelude::*;
-use tetris::{Event, Game, GameState, InputEvent, replay::Replay, sound::Sink};
+use tetris::{
+    Event, Game, GameState, InputEvent,
+    replay::Replay,
+    sound::{Sink, SoundPlayer},
+};
 use web_time::Instant;
 
 /// Simple program to greet a person
@@ -67,23 +71,9 @@ fn main() {
     let level = LevelFilter::iter().nth(1 + args.verbose as usize).unwrap_or(LevelFilter::max());
     ftail::Ftail::new().single_file(&log_file, true, level).init().ok();
     log_panics::init();
-    let settings = if let Some(path) = args.config {
-        fs::read_to_string(path).expect("Couldn't read settings file")
-    } else {
-        let default_settings_content = include_str!("../settings.kdl");
-        fs::create_dir_all(dirs.config_dir()).ok();
-        let settings_path = dirs.config_dir().join("settings.kdl");
-        match fs::read_to_string(&settings_path) {
-            Ok(s) => s,
-            Err(_) => {
-                fs::write(settings_path, default_settings_content).ok();
-                default_settings_content.to_owned()
-            }
-        }
-    };
-    let mut player = sound::Rodio::new(&dirs).expect("Failed to initialize audio engine");
-    let (config, keys) = settings::load(&settings, &mut player).expect("Invalid settings file");
-    return;
+    let mut player = sound::Rodio::new().expect("Failed to initialize audio engine").into();
+    let (config, keys) =
+        settings::load(args.config.as_deref(), &dirs, &mut player).expect("Invalid settings file");
     let _mode = RawMode::enter();
     let input = EventLoop::start(keys);
     let mut game = Game::new(config);
@@ -97,7 +87,12 @@ fn main() {
     while run_game(&mut game, &input, &player, &replay_dir) {}
 }
 
-fn run_game(game: &mut Game, input: &EventLoop, player: &impl Sink, replay_dir: &Path) -> bool {
+fn run_game(
+    game: &mut Game,
+    input: &EventLoop,
+    player: &SoundPlayer<impl Sink>,
+    replay_dir: &Path,
+) -> bool {
     let (width, height) = get_size();
     if width < 40 || height < 22 {
         panic!("screen too small");

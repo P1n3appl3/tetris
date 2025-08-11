@@ -10,7 +10,8 @@ use std::{array, collections::HashMap};
 
 use futures::prelude::*;
 use log::{error, info};
-use tetris::{Cell, Config, Event, Game, GameState, InputEvent, NullPlayer};
+use tetris::sound::{NullSink, SoundPlayer};
+use tetris::{Cell, Config, Event, Game, GameState, InputEvent};
 use ultraviolet::DVec3;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -54,7 +55,8 @@ pub async fn main() -> Result<(), JsValue> {
     info!("starting event loop");
     let start_time = Instant::now();
     // TODO: timers
-    game.start(0xabad1d3a, &NullPlayer);
+    let sound = SoundPlayer::<NullSink>::default();
+    game.start(0xabad1d3a, &sound);
     game.state = GameState::Running;
 
     // TODO: eventually we wanna go back to separate event loops for inputs/drawing/timers,
@@ -78,14 +80,14 @@ pub async fn main() -> Result<(), JsValue> {
                 use tetris::{Event::*, InputEvent::*};
                 match e {
                     Input(Restart) => {
-                        game.start((t * 1000.0) as u64, &NullPlayer);
+                        game.start((t * 1000.0) as u64, &sound);
                         break;
                     }
                     _ => {}
                 }
                 info!("handling: {e:?}");
                 let t = Instant::now();
-                game.handle(e, t, &NullPlayer);
+                game.handle(e, t, &sound);
             }
             draw_board(&game, &board, &skin);
             draw_queue(&game, &queue, &skin, 8);
@@ -192,6 +194,9 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
     let closure: Box<dyn FnMut(_)> = Box::new({
         let mut events = events.clone();
         move |keydown: KeyboardEvent| {
+            if keydown.repeat() {
+                return;
+            }
             let key = keydown.key();
             if let Some(&ev) = keymap.get(key.as_str()) {
                 info!("sent an event: {key} -> {ev:?}");

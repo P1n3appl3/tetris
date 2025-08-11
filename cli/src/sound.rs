@@ -1,69 +1,46 @@
-use std::{collections::HashMap, fs::File, io::BufReader};
+use std::{fs::File, path::Path};
 
-use anyhow::{Result, anyhow};
-use directories::ProjectDirs;
+use anyhow::Result;
 use rodio::{
-    Decoder, OutputStream, OutputStreamHandle, source::Source, static_buffer::StaticSamplesBuffer,
+    Decoder, OutputStream, OutputStreamBuilder, source::Source, static_buffer::StaticSamplesBuffer,
 };
-use tetris::sound::Sound;
+
+use tetris::sound;
 
 pub struct Rodio {
-    pub volume: f32,
-    _stream: OutputStream,
-    handle: OutputStreamHandle,
-    sounds: HashMap<Sound, StaticSamplesBuffer<f32>>,
-    #[cfg(feature = "url-assets")]
-    cache: cached_path::Cache,
+    pub volume: f64,
+    stream: OutputStream,
 }
 
 impl Rodio {
-    pub fn new(dirs: &ProjectDirs) -> Result<Self> {
-        let (_stream, handle) = OutputStream::try_default()?;
-
-        #[cfg(feature = "url-assets")]
-        let cache = cached_path::CacheBuilder::new()
-            .dir(dirs.cache_dir().to_path_buf())
-            .client_builder(reqwest::blocking::ClientBuilder::new().user_agent("tetris"))
-            .build()?;
-
-        Ok(Self {
-            _stream,
-            volume: 0.5,
-            handle,
-            sounds: HashMap::new(),
-            #[cfg(feature = "url-assets")]
-            cache,
-        })
+    pub fn new() -> Result<Self> {
+        let stream = OutputStreamBuilder::from_default_device()?.open_stream()?;
+        Ok(Self { stream, volume: 0.5 })
     }
-}
 
-impl tetris::sound::Sink for Rodio {
-    type Asset<'a> = &'a str;
-    fn add_sound<T>(&mut self, sound: T, filename: Self::Asset<'_>) -> Result<()> {
-        #[cfg(feature = "url-assets")]
-        let filename = self.cache.cached_path(&filename)?;
-
-        let decoder = Decoder::new(BufReader::new(File::open(filename)?))?;
+    pub fn decode(path: &Path) -> Result<StaticSamplesBuffer> {
+        let decoder = Decoder::try_from(File::open(path)?)?;
         let (channels, rate, samples) = (
             decoder.channels(),
             decoder.sample_rate(),
-            decoder.convert_samples().collect::<Vec<_>>().leak(),
+            decoder.into_iter().collect::<Vec<f32>>().leak(),
         );
-        self.sounds.insert(sound.into(), StaticSamplesBuffer::new(channels, rate, samples));
+        Ok(StaticSamplesBuffer::new(channels, rate, samples))
+    }
+}
+
+impl sound::Sink for Rodio {
+    type Asset = StaticSamplesBuffer;
+    // TODO: cloning the sound on every play seems bad. even if volume is dynamic it
+    // should maybe cache the amplified sounds
+    fn play(&self, s: &Self::Asset) -> Result<()> {
+        let sink = rodio::Sink::connect_new(self.stream.mixer());
+        sink.append(s.clone().amplify_normalized(self.volume as f32));
+        sink.detach();
         Ok(())
     }
 
-    fn play<T>(&self, s: T) -> Result<()> {
-        if let Some(sound) = self.sounds.get(s.into()) {
-            // TODO: cloning the sound on every seems bad. even if volume is dynamic it
-            // should probably cache the amplified sounds
-            Ok(self.handle.play_raw(sound.clone().amplify(self.volume))?)
-        } else {
-            Err(anyhow!("couldn't find sound"))
-        }
-    }
-
-    fn set_volume(&mut self, level: f32) {
+    fn set_volume(&mut self, level: f64) {
         debug_assert!((0.0..=1.0).contains(&level));
         self.volume = level;
     }
