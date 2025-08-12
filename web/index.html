@@ -26,8 +26,83 @@
         <div id="fps">fps: 0</div>
     </body>
     <div class="settings">
-        <details><summary>keybinds</summary></details>
-        <details><summary>gameplay</summary></details>
+        <details>
+            <summary>keybinds</summary>
+            <button id="bind_all">bind all</button>
+            <button id="reset-bindings">reset</button>
+            <label>
+                left <input type="text" class="keybinding" id="right-key" value="l" />
+            </label>
+            <label>
+                right <input type="text" class="keybinding" id="left-key" value="j" />
+            </label>
+            <label>
+                soft-drop <input type="text" class="keybinding" id="soft-key" value="k" />
+            </label>
+            <label>
+                hard-drop
+                <input type="text" class="keybinding" id="hard-key" value="space" />
+            </label>
+            <label>
+                rotate cw
+                <input type="text" class="keybinding" id="cw-key" value="f" />
+            </label>
+            <label>
+                rotate ccw
+                <input type="text" class="keybinding" id="ccw-key" value="d" />
+            </label>
+            <label>
+                rotate 180° <input type="text" class="keybinding" id="180-key" value="s" />
+            </label>
+            <label>
+                hold <input type="text" class="keybinding" id="hold-key" value="a" />
+            </label>
+            <hr />
+            <label>
+                restart <input type="text" class="keybinding" id="restart-key" value="r" />
+            </label>
+            <label>
+                undo <input type="text" class="keybinding" id="undo-key" value="w" />
+            </label>
+            <label>
+                redo <input type="text" class="keybinding" id="redo-key" value="e" />
+            </label>
+        </details>
+        <details>
+            <summary>gameplay</summary>
+            <label
+                >DAS: <input id="das" class="num-select" type="number" value="10"
+            /></label>
+            <label
+                >ARR: <input id="arr" class="num-select" type="number" value="0"
+            /></label>
+            <label
+                >soft-drop:
+                <input id="soft-drop" class="num-select" type="number" value="5.0"
+            /></label>
+            <label
+                >gravity: <input id="gravity" class="num-select" type="number" value="1.0"
+            /></label>
+            <!-- TODO: lock delay -->
+            <hr />
+            <label>
+                rotation system:
+                <select name="kick" id="kick-select">
+                    <option>SRS</option>
+                    <option>SRS+</option>
+                    <option>TGM</option>
+                    <option>none</option>
+                </select>
+            </label>
+            <label>
+                garbage table:
+                <select name="garbage" id="garbage-select">
+                    <option>guideline</option>
+                    <option>tetrio</option>
+                    <option>jstris</option>
+                </select>
+            </label>
+        </details>
         <details>
             <summary>graphics</summary>
             <div>
@@ -48,32 +123,128 @@
                 here
             </a>
             <hr />
-            <label style="justify-content: space-between"
+            <label
                 >grid:
                 <select name="grid" id="grid-select">
-                    <option value="partial">partial</option>
-                    <option value="dotted">dotted</option>
-                    <option value="full">full</option>
-                    <option value="dots">dots</option>
-                    <option value="pluses">pluses</option>
-                    <option value="none">none</option>
+                    <option>partial</option>
+                    <option>dotted</option>
+                    <option>full</option>
+                    <option>dots</option>
+                    <option>pluses</option>
+                    <option>none</option>
                 </select>
             </label>
             <label>opacity:<input type="range" /></label>
             <hr />
-            <label style="justify-content: space-between">
+            <label>
                 ghost:
                 <select name="ghost" id="ghost-select">
-                    <option value="skin">skin</option>
-                    <option value="outline">outline</option>
-                    <option value="mino-outline">mino outline</option>
-                    <option value="none">none</option>
+                    <option>skin</option>
+                    <option>solid</option>
+                    <option>outline</option>
+                    <option>mino outline</option>
+                    <option>none</option>
                 </select>
             </label>
             <label>opacity:<input type="range" /></label>
         </details>
         <details>
             <summary>sound</summary>
+            <label>
+                preset:
+                <select name="sound-preset" id="sound-preset">
+                    <option>custom</option>
+                    <option>friends</option>
+                    <option>ppt</option>
+                    <option>tec</option>
+                    <option>99</option>
+                    <option>tgm</option>
+                    <option>tetrio</option>
+                    <option>nullpomino</option>
+                    <option>rainforest</option>
+                    <option>yotipo's</option>
+                    <option>tetra x</option>
+                </select>
+            </label>
+            <details>
+                <summary>actions</summary>
+                <label>move<input type="url" placeholder="url of sound file..."/></label>
+                <label>rotate<input type="url" placeholder="url of sound file..."/></label>
+                <label>spin<input type="url" placeholder="url of sound file..."/></label>
+                <label>minispin<input type="url" placeholder="url of sound file..."/></label>
+                <label>land<input type="url" placeholder="url of sound file..."/></label>
+                <label>hard-drop<input type="url" placeholder="url of sound file..."/></label>
+                <label>soft-drop<input type="url" placeholder="url of sound file..."/></label>
+                <label>gravity<input type="url" placeholder="url of sound file..."/></label>
+                <label>lock<input type="url" placeholder="url of sound file..."/></label>
+                <label>hold<input type="url" placeholder="url of sound file..."/></label>
+                <label>nohold<input type="url" placeholder="url of sound file..."/></label>
+            </details>
+            <details>
+                <summary>line clears</summary>
+            </details>
+            <details>
+                <summary>meta</summary>
+            </details>
+        </details>
+        <details>
+            <summary>stats</summary>
+            <label>
+                Row 1:
+                <select name="row-1" id="row-1">
+                    <option>time</option>
+                    <option>pieces</option>
+                    <option>lines</option>
+                    <option>attack</option>
+                    <option>apm</option>
+                    <option>ppm</option>
+                    <option>kpp</option>
+                    <option>finesse</option>
+                    <option>holds</option>
+                </select>
+            </label>
+            <label>
+                Row 2:
+                <select name="row-1" id="row-1">
+                    <option>time</option>
+                    <option>pieces</option>
+                    <option>lines</option>
+                    <option>attack</option>
+                    <option>apm</option>
+                    <option>ppm</option>
+                    <option>kpp</option>
+                    <option>finesse</option>
+                    <option>holds</option>
+                </select>
+            </label>
+            <label>
+                Row 3:
+                <select name="row-1" id="row-1">
+                    <option>time</option>
+                    <option>pieces</option>
+                    <option>lines</option>
+                    <option>attack</option>
+                    <option>apm</option>
+                    <option>ppm</option>
+                    <option>kpp</option>
+                    <option>finesse</option>
+                    <option>holds</option>
+                </select>
+            </label>
+            <label>
+                Row 4:
+                <select name="row-1" id="row-1">
+                    <option>time</option>
+                    <option>pieces</option>
+                    <option>lines</option>
+                    <option>attack</option>
+                    <option>apm</option>
+                    <option>ppm</option>
+                    <option>kpp</option>
+                    <option>finesse</option>
+                    <option>holds</option>
+                </select>
+            </label>
         </details>
     </div>
     <script type="module">

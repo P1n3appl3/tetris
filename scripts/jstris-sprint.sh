@@ -26,7 +26,7 @@ while [ "$len" -eq 200 ]; do
     time=$(bc <<<"$longest + .001")
     ((cur += len))
     echo -e "$cur games \t (up to ${time}s)"
-    sleep 2 # TODO: read Retry-After header when 429's happen for better rate limiting
+    sleep 5 # TODO: read Retry-After header when 429's happen for better rate limiting
 done
 
 sort -k5 "$f" | column -t | sponge "$f"

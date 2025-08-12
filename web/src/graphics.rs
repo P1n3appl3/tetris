@@ -41,11 +41,12 @@ pub fn draw_board(
     let document = window.document().expect("Could not get document");
     let cx = canvas.get_context("2d")?.unwrap().dyn_into::<CanvasRenderingContext2d>()?;
 
-    // make a cool border color cuz why not
+    // rainbow border cuz why not :3
     cx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
     let (r, g, b) = fun_color(t / 10.0).into();
     cx.set_stroke_style_str(&format!("rgb({r}, {g}, {b})"));
-    cx.stroke_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
+    cx.set_line_width(2.0);
+    cx.stroke_rect(1.0, 1.0, (canvas.width()) as f64 - 2.0, (canvas.height()) as f64 - 2.0);
 
     let border_width = 1.0;
     let ghost_alpha = 0.5; //TODO: slider

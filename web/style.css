@@ -92,9 +92,17 @@ a {
 .settings label {
     display: flex;
     gap: 5px;
+    justify-content: space-between;
 }
 
 .settings input[type="text"] {
     width: 100%;
     box-sizing: border-box;
+}
+
+.keybinding {
+    max-width: 100px;
+}
+.num-select  {
+    max-width: 50px;
 }
