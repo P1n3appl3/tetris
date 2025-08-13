@@ -4,7 +4,7 @@ mod graphics;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::mpsc::{self, Receiver, Sender, channel};
+use std::sync::mpsc::{self, channel};
 
 use log::info;
 use tetris::sound::{NullSink, SoundPlayer};
@@ -40,7 +40,7 @@ pub async fn main() -> Result<(), JsValue> {
         ghost: true,
     };
 
-    let (mut raf_loop, canceler) = wasm_repeated_animation_frame::RafLoop::new();
+    let (mut raf_loop, _canceler) = wasm_repeated_animation_frame::RafLoop::new();
     let mut fps = fps::FPSCounter::new();
     let mut game = Game::new(config);
     info!("starting event loop");
@@ -56,7 +56,8 @@ pub async fn main() -> Result<(), JsValue> {
         loop {
             raf_loop.next().await;
             let fps = fps.tick();
-            let t = (Instant::now() - start_time).as_secs_f64();
+            let now = Instant::now();
+            let t = (now - start_time).as_secs_f64();
             timer_div.set_text_content(Some(&format!("{t:.2}")));
             if let Some(target) = game.target_lines {
                 right_info_div
@@ -73,8 +74,20 @@ pub async fn main() -> Result<(), JsValue> {
                     _ => {}
                 }
                 info!("handling: {e:?}");
-                let t = Instant::now();
-                game.handle(e, t, &sound);
+                game.handle(e, now, &sound);
+            }
+            if game.state != GameState::Done {
+                loop {
+                    if let Some(&(t, timer_event)) = game.timers.front() {
+                        if t < now {
+                            game.timers.pop_front();
+                            log::debug!(target: "timer","{timer_event:?}");
+                            game.handle(Event::Timer(timer_event), now, &sound);
+                        } else {
+                            break;
+                        }
+                    }
+                }
             }
             graphics::draw_board(&game, &board, &skin, t).unwrap();
             // could do these only when needed instead of every frame if we wanted
@@ -98,8 +111,8 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
         (" ", Hard),
         ("f", Cw),
         ("d", Ccw),
-        ("a", Hold),
-        ("s", Flip),
+        ("s", Hold),
+        ("a", Flip),
         ("r", Restart),
         ("q", Quit),
     ]
@@ -107,7 +120,7 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
     .collect::<HashMap<&'static str, InputEvent>>();
 
     let closure: Box<dyn FnMut(_)> = Box::new({
-        let mut events = events.clone();
+        let events = events.clone();
         move |keydown: KeyboardEvent| {
             if keydown.repeat() {
                 return;
@@ -115,7 +128,7 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
             let key = keydown.key();
             if let Some(&ev) = keymap.get(key.as_str()) {
                 info!("got a keydown event: {key}");
-                events.send(Event::Input(ev));
+                events.send(Event::Input(ev)).unwrap();
             }
         }
     });
@@ -127,19 +140,18 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
 
     let window = web_sys::window().expect("could not get window handle");
     let input = Rc::new(RefCell::new(window));
-    use tetris::InputEvent::*;
     let keymap =
         [("ArrowLeft", ReleaseLeft), ("ArrowRight", ReleaseRight), ("ArrowDown", ReleaseSoft)]
             .into_iter()
             .collect::<HashMap<&'static str, InputEvent>>();
 
     let closure: Box<dyn FnMut(_)> = Box::new({
-        let mut events = events.clone();
+        let events = events.clone();
         move |keydown: web_sys::KeyboardEvent| {
             let key = keydown.key();
             if let Some(&ev) = keymap.get(key.as_str()) {
                 info!("got a keyup event: {key}");
-                events.send(Event::Input(ev));
+                events.send(Event::Input(ev)).unwrap();
             }
         }
     });
