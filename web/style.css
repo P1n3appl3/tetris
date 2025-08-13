@@ -17,7 +17,6 @@ body {
 }
 canvas {
     display: inline-block;
-    background-color: blanchedalmond;
     /*image-rendering: pixelated;
     image-rendering: crisp-edges*/
 }

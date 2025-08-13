@@ -12,18 +12,18 @@ use std::{
 };
 
 use clap::{
-    builder::{styling::AnsiColor::*, Styles},
     Parser,
+    builder::{Styles, styling::AnsiColor::*},
 };
 use directories::ProjectDirs;
 use graphics::RawMode;
 use input::EventLoop;
-use log::{debug, error, LevelFilter};
+use log::{LevelFilter, debug, error};
 use rand::prelude::*;
 use tetris::{
+    Event, Game, GameState, InputEvent, Mode,
     replay::Replay,
     sound::{Sink, SoundPlayer},
-    Event, Game, GameState, InputEvent, Mode,
 };
 use web_time::Instant;
 
@@ -80,7 +80,7 @@ fn main() {
     game.mode = if args.practice {
         Mode::Zen {}
     } else {
-        Mode::Sprint { target_lines: Some(args.lines.map(u16::from).unwrap_or(40)) }
+        Mode::Sprint { target_lines: args.lines.map(u16::from).unwrap_or(40) }
     };
     let replay_dir = args.replay_dir.unwrap_or_else(|| {
         let d = dirs.data_dir().join("replays");
@@ -109,9 +109,9 @@ fn run_game(
     graphics::draw(width as i16, height as i16, game).unwrap();
 
     let done = loop {
-        use mpsc::RecvTimeoutError::*;
         use GameState::*;
         use InputEvent::*;
+        use mpsc::RecvTimeoutError::*;
         let now = Instant::now();
         let redraw_timeout = Duration::from_millis(if game.state == Done { 10000 } else { 100 });
         let deadline = game

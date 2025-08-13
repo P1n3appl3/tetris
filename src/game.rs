@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use log::info;
+use log::debug;
 use web_time::Instant;
 
 use crate::{
@@ -12,14 +12,15 @@ pub type Board = [[Cell; 10]; 50]; // hope no one stacks higher than this 👀
 
 #[derive(Clone)]
 pub enum Mode {
-    Sprint { target_lines: Option<u16> },
+    Sprint { target_lines: u16 },
+    // Cheese { target_lines: u16 },
     Zen {},
 }
 
 impl Mode {
     pub fn is_complete(&self, lines: u16) -> bool {
         match self {
-            Mode::Sprint { target_lines: Some(target_lines) } => *target_lines >= lines,
+            Mode::Sprint { target_lines } => *target_lines >= lines,
             _ => false,
         }
     }
@@ -72,7 +73,7 @@ impl Game {
             current: (Piece::I, (3, 21), Rotation::North),
             hold: None,
             lines: 0,
-            mode: Mode::Sprint { target_lines: Some(40) },
+            mode: Mode::Sprint { target_lines: 40 },
             timers: Default::default(),
             started_right: None,
             started_left: None,
@@ -108,7 +109,7 @@ impl Game {
     pub fn handle(&mut self, event: Event, time: Instant, sound: &SoundPlayer<impl Sink>) {
         use {Event::*, GameState::*, InputEvent::*, TimerEvent::*};
         self.time = time;
-        info!("handling input: {event:?}");
+        debug!("handling input: {event:?}");
         match event {
             Input(PressLeft) => {
                 if self.state == Running && self.try_move((-1, 0)) {
@@ -187,9 +188,9 @@ impl Game {
             }
             Input(Hard) | Timer(Lock | Extended | Timeout) => {
                 let moment = Moment {
-                    board: self.board.clone(),
-                    current: self.current.clone(),
-                    hold: self.hold.clone(),
+                    board: self.board,
+                    current: self.current,
+                    hold: self.hold,
                     upcomming: self.upcomming.clone(),
                 };
                 self.history.push(moment);
@@ -246,6 +247,22 @@ impl Game {
             }
         };
         // TODO: set lock timers if on the ground and they arent already set
+    }
+
+    pub fn ghost_pos(&self) -> (i8, i8) {
+        let (piece, pos, rot) = self.current;
+        let current_pos = piece.get_pos(rot, pos);
+        let mut ghost = current_pos;
+        let mut y = pos.1;
+        loop {
+            let next = ghost.map(|(x, y)| (x, y - 1));
+            if !self.check_valid(next) {
+                break;
+            }
+            y -= 1;
+            ghost = next;
+        }
+        (pos.0, y)
     }
 
     fn set_timer(&mut self, t: TimerEvent) {
@@ -305,7 +322,7 @@ impl Game {
         self
     }
 
-    pub fn check_valid(&self, pos: Pos) -> bool {
+    fn check_valid(&self, pos: Pos) -> bool {
         pos.into_iter().all(|(x, y)| {
             (0..10).contains(&x)
                 && (0..30).contains(&y)

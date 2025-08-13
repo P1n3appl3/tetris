@@ -16,7 +16,7 @@ use web_time::Instant;
 #[wasm_bindgen]
 pub async fn main() -> Result<(), JsValue> {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-    wasm_logger::init(wasm_logger::Config::default());
+    wasm_logger::init(wasm_logger::Config::new(log::Level::Info));
     info!("wasm blob initialized, running main...");
     let (tx, rx) = channel();
     init_input_handlers(tx)?;
@@ -60,21 +60,17 @@ pub async fn main() -> Result<(), JsValue> {
             let now = Instant::now();
             let t = (now - start_time).as_secs_f64();
             timer_div.set_text_content(Some(&format!("{t:.2}")));
-            if let tetris::Mode::Sprint { target_lines: Some(target) } = game.mode {
+            if let tetris::Mode::Sprint { target_lines: target } = game.mode {
                 right_info_div
                     .set_text_content(Some(&format!("{}", target.saturating_sub(game.lines))));
             }
             fps_div.set_text_content(Some(&format!("fps: {fps}")));
             while let Ok(e) = rx.try_recv() {
                 use tetris::{Event::*, InputEvent::*};
-                match e {
-                    Input(Restart) => {
-                        game.start((t * 1000.0) as u64, &sound);
-                        break;
-                    }
-                    _ => {}
+                if let Input(Restart) = e {
+                    game.start((t * 1000.0) as u64, &sound);
+                    break;
                 }
-                info!("handling: {e:?}");
                 game.handle(e, now, &sound);
             }
             if game.state != GameState::Done {
@@ -82,7 +78,6 @@ pub async fn main() -> Result<(), JsValue> {
                     if let Some(&(t, timer_event)) = game.timers.front() {
                         if t < now {
                             game.timers.pop_front();
-                            log::debug!(target: "timer","{timer_event:?}");
                             game.handle(Event::Timer(timer_event), now, &sound);
                         } else {
                             break;
@@ -131,7 +126,6 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
             if let Some(&ev) = keymap.get(key.as_str()) {
                 // TODO: setup better support for ctrl z
                 if ev != Undo || keydown.ctrl_key() {
-                    info!("got a keydown event: {key}");
                     events.send(Event::Input(ev)).unwrap();
                 }
             }
@@ -155,7 +149,6 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
         move |keydown: web_sys::KeyboardEvent| {
             let key = keydown.key();
             if let Some(&ev) = keymap.get(key.as_str()) {
-                info!("got a keyup event: {key}");
                 events.send(Event::Input(ev)).unwrap();
             }
         }

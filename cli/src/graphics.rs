@@ -56,7 +56,7 @@ pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
         )?;
     }
     let text_color = (255, 255, 255);
-    if let Mode::Sprint { target_lines: Some(target) } = game.mode {
+    if let Mode::Sprint { target_lines: target } = game.mode {
         draw_text(
             o,
             (ox + 34, oy + 20),
@@ -116,14 +116,7 @@ fn draw_board(o: &mut StdoutLock, g: &Game, origin: (i16, i16)) -> Result<()> {
     let (ox, oy) = origin;
     let (piece, pos, rot) = g.current;
     let current_pos = piece.get_pos(rot, pos);
-    let mut ghost = current_pos;
-    loop {
-        let next = ghost.map(|(x, y)| (x, y - 1));
-        if !g.check_valid(next) {
-            break;
-        }
-        ghost = next;
-    }
+    let ghost = piece.get_pos(rot, g.ghost_pos());
 
     set_color(o, BG_COLOR)?;
     write!(o, csi!("2J"))?;
