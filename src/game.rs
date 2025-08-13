@@ -3,9 +3,20 @@ use std::collections::VecDeque;
 use log::info;
 use web_time::Instant;
 
-use crate::{sound::{Sink, SoundPlayer}, *};
+use crate::{
+    sound::{Sink, SoundPlayer},
+    *,
+};
 
 pub type Board = [[Cell; 10]; 50]; // hope no one stacks higher than this 👀
+                                   //
+#[derive(Clone)]
+pub struct Moment {
+    pub board: [[Cell; 10]; 50], // hope no one stacks higher than this 👀
+    pub current: (Piece, (i8, i8), Rotation),
+    pub hold: Option<Piece>,
+    pub upcomming: VecDeque<Piece>,
+}
 
 #[derive(Clone)]
 pub struct Game {
@@ -26,6 +37,7 @@ pub struct Game {
     pub can_hold: bool,
     pub state: GameState,
     pub rng: StdRng,
+    pub history: Vec<Moment>,
 }
 
 impl Game {
@@ -48,6 +60,7 @@ impl Game {
             soft_dropping: false,
             can_hold: true,
             state: GameState::Done,
+            history: vec![],
         }
     }
 
@@ -133,7 +146,30 @@ impl Game {
                     sound.play(sound::Action::NoHold).ok();
                 }
             }
-            Input(Hard) | Timer(Lock | Extended | Timeout) => self.hard_drop(sound),
+            Input(Undo) => {
+                let Some(prev) = self.history.pop() else {
+                    return;
+                };
+                self.board = prev.board;
+                self.current = prev.current;
+                let pos = (3, 21);
+                let rot = Rotation::North;
+                self.current.1 = pos;
+                self.current.2 = rot;
+                self.hold = prev.hold;
+                self.upcomming = prev.upcomming;
+                // return true;
+            }
+            Input(Hard) | Timer(Lock | Extended | Timeout) => {
+                let moment = Moment {
+                    board: self.board.clone(),
+                    current: self.current.clone(),
+                    hold: self.hold.clone(),
+                    upcomming: self.upcomming.clone(),
+                };
+                self.history.push(moment);
+                self.hard_drop(sound)
+            }
             Timer(t @ (SoftDrop | Gravity)) => {
                 if self.state == Running {
                     self.try_drop();
