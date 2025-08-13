@@ -14,7 +14,7 @@ pub type Board = [[Cell; 10]; 50]; // hope no one stacks higher than this 👀
 pub enum Mode {
     Sprint { target_lines: u16 },
     // Cheese { target_lines: u16 },
-    Zen {},
+    Practice {},
 }
 
 impl Mode {
@@ -28,15 +28,15 @@ impl Mode {
     fn allows_undo(&self) -> bool {
         match self {
             Mode::Sprint { .. } => false,
-            Mode::Zen {} => true,
+            Mode::Practice {} => true,
         }
     }
 }
 
 #[derive(Clone)]
 pub struct Moment {
-    pub board: [[Cell; 10]; 50], // hope no one stacks higher than this 👀
-    pub current: (Piece, (i8, i8), Rotation),
+    pub board: [[Cell; 10]; 50],
+    pub current: Piece,
     pub hold: Option<Piece>,
     pub upcomming: VecDeque<Piece>,
 }
@@ -165,7 +165,6 @@ impl Game {
                         self.can_hold = false;
                     }
                 } else {
-                    // TODO: add failed hold sound
                     sound.play(sound::Action::NoHold).ok();
                 }
             }
@@ -177,19 +176,17 @@ impl Game {
                     return;
                 };
                 self.board = prev.board;
-                self.current = prev.current;
-                let pos = (3, 21);
-                let rot = Rotation::North;
-                self.current.1 = pos;
-                self.current.2 = rot;
+                debug_assert!(
+                    self.spawn(prev.current),
+                    "shouldn't be invalid since that piece was able to be placed"
+                );
                 self.hold = prev.hold;
                 self.upcomming = prev.upcomming;
-                // return true;
             }
             Input(Hard) | Timer(Lock | Extended | Timeout) => {
                 let moment = Moment {
                     board: self.board,
-                    current: self.current,
+                    current: self.current.0,
                     hold: self.hold,
                     upcomming: self.upcomming.clone(),
                 };
@@ -227,11 +224,6 @@ impl Game {
                 self.set_timer(Gravity);
             }
             Input(Restart | Quit) => unreachable!("should be handled in outer event loop"),
-            // Input(Undo | Redo) => {
-            //     // this might make using Instants impossible... if you undo you'd want to
-            //     // also roll back the current time
-            //     unreachable!("should be handled in outer event loop")
-            // }
 
             // TODO: add das sound effect
             Timer(DasLeft | DasRight) => {

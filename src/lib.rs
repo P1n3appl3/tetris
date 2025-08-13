@@ -126,18 +126,6 @@ impl Default for Config {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Bindings {
-    pub left: char,
-    pub right: char,
-    pub soft: char,
-    pub hard: char,
-    pub cw: char,
-    pub ccw: char,
-    pub flip: char,
-    pub hold: char,
-}
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum GameState {
     Startup,

@@ -11,6 +11,18 @@ use tetris::InputEvent;
 
 use crate::settings::keys::*;
 
+#[derive(Copy, Clone, Debug)]
+pub struct Bindings {
+    pub left: char,
+    pub right: char,
+    pub soft: char,
+    pub hard: char,
+    pub cw: char,
+    pub ccw: char,
+    pub flip: char,
+    pub hold: char,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct KeyEvent {
     pub key: char,
@@ -29,7 +41,7 @@ pub struct EventLoop {
 }
 
 impl EventLoop {
-    pub fn start(bindings: tetris::Bindings) -> Self {
+    pub fn start(bindings: Bindings) -> Self {
         let (tx, rx) = mpsc::channel();
 
         thread::spawn(move || {
@@ -50,7 +62,7 @@ impl EventLoop {
                 (('r', 0, true), Restart),
                 (('q', 0, true), Quit),
                 (('c', CTRL, true), Quit),
-                // (('u', 0, true), Undo),
+                (('u', 0, true), Undo),
                 // (('r', CTRL, true), Redo),
             ]
             .into_iter()

@@ -43,7 +43,7 @@ pub async fn main() -> Result<(), JsValue> {
     let (mut raf_loop, _canceler) = wasm_repeated_animation_frame::RafLoop::new();
     let mut fps = fps::FPSCounter::new();
     let mut game = Game::new(config);
-    game.mode = tetris::Mode::Zen {};
+    game.mode = tetris::Mode::Practice {};
     info!("starting event loop");
     let start_time = Instant::now();
     // TODO: timers
@@ -124,20 +124,15 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
             }
             let key = keydown.key();
             if let Some(&ev) = keymap.get(key.as_str()) {
-                // TODO: setup better support for ctrl z
-                if ev != Undo || keydown.ctrl_key() {
-                    events.send(Event::Input(ev)).unwrap();
-                }
+                events.send(Event::Input(ev)).unwrap();
             }
         }
     });
 
     let closure = Closure::wrap(closure);
-
     window.add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref())?;
     closure.forget();
 
-    let window = web_sys::window().expect("could not get window handle");
     let input = Rc::new(RefCell::new(window));
     let keymap =
         [("ArrowLeft", ReleaseLeft), ("ArrowRight", ReleaseRight), ("ArrowDown", ReleaseSoft)]
@@ -155,7 +150,6 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
     });
 
     let closure = Closure::wrap(closure);
-
     input
         .borrow_mut()
         .add_event_listener_with_callback("keyup", closure.as_ref().unchecked_ref())?;

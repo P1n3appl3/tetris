@@ -37,16 +37,8 @@ pub fn draw_board(
     t: f64,
 ) -> Result<(), JsValue> {
     let cx = canvas.get_context("2d")?.unwrap().dyn_into::<CanvasRenderingContext2d>()?;
-
-    // rainbow border cuz why not :3
     cx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
-    let (r, g, b) = fun_color(t / 10.0).into();
-    cx.set_stroke_style_str(&format!("rgb({r}, {g}, {b})"));
-    cx.set_line_width(2.0);
-    cx.stroke_rect(1.0, 1.0, (canvas.width()) as f64 - 2.0, (canvas.height()) as f64 - 2.0);
-
     let border_width = 1.0;
-    let ghost_alpha = 0.5; //TODO: slider
     for y in 0..20 {
         for x in 0..10 {
             if let Some(mut sprite) = skindex(game.board[y][x]).map(|i| &skin[i]) {
@@ -67,7 +59,7 @@ pub fn draw_board(
     }
 
     let (piece, (x, y), rot) = game.current;
-    cx.set_global_alpha(ghost_alpha);
+    cx.set_global_alpha(0.25); // TODO: slider
     let ghost = game.ghost_pos();
     let origin = (
         (ghost.0 as f64 * SIZE as f64 + border_width),
@@ -79,6 +71,13 @@ pub fn draw_board(
     let origin =
         (x as f64 * SIZE as f64 + border_width, (19 - y) as f64 * SIZE as f64 + border_width);
     draw_piece(canvas, skin, piece, rot, origin)?;
+
+    // rainbow border cuz why not :3
+    let (r, g, b) = fun_color(t / 10.0).into();
+    cx.set_stroke_style_str(&format!("rgb({r}, {g}, {b})"));
+    cx.set_line_width(2.0);
+    cx.stroke_rect(1.0, 1.0, (canvas.width()) as f64 - 2.0, (canvas.height()) as f64 - 2.0);
+
     Ok(())
 }
 

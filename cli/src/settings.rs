@@ -4,10 +4,11 @@ use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use tetris::{
-    Bindings, Config,
+    Config,
     sound::{Action, Clear, Meta, Sink, SoundPlayer},
 };
 
+use crate::input::Bindings;
 use crate::sound::Rodio;
 
 pub fn load(
