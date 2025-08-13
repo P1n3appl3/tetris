@@ -20,7 +20,7 @@ pub enum Mode {
 impl Mode {
     pub fn is_complete(&self, lines: u16) -> bool {
         match self {
-            Mode::Sprint { target_lines } => *target_lines >= lines,
+            &Mode::Sprint { target_lines } => lines >= target_lines,
             _ => false,
         }
     }

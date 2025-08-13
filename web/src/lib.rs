@@ -87,7 +87,7 @@ pub async fn main() -> Result<(), JsValue> {
             }
             graphics::draw_board(&game, &board, &skin, t).unwrap();
             // could do these only when needed instead of every frame if we wanted
-            graphics::draw_queue(&game, &queue, &skin, 8).unwrap();
+            graphics::draw_queue(&game, &queue, &skin, 5).unwrap();
             graphics::draw_hold(&game, &hold, &skin).unwrap();
         }
     };
