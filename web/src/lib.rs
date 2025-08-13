@@ -132,7 +132,7 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
                 // TODO: setup better support for ctrl z
                 if ev != Undo || keydown.ctrl_key() {
                     info!("got a keydown event: {key}");
-                    events.send(Event::Input(ev)).unwrap();
+                    events.send(Event::Input(ev)).ok();
                 }
             }
         }
@@ -156,7 +156,7 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
             let key = keydown.key();
             if let Some(&ev) = keymap.get(key.as_str()) {
                 info!("got a keyup event: {key}");
-                events.send(Event::Input(ev)).unwrap();
+                events.send(Event::Input(ev)).ok();
             }
         }
     });
