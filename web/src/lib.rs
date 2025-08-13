@@ -115,6 +115,7 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
         ("a", Flip),
         ("r", Restart),
         ("q", Quit),
+        ("z", Undo),
     ]
     .into_iter()
     .collect::<HashMap<&'static str, InputEvent>>();
@@ -127,8 +128,11 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
             }
             let key = keydown.key();
             if let Some(&ev) = keymap.get(key.as_str()) {
-                info!("got a keydown event: {key}");
-                events.send(Event::Input(ev)).unwrap();
+                // TODO: setup better support for ctrl z
+                if ev != Undo || keydown.ctrl_key() {
+                    info!("got a keydown event: {key}");
+                    events.send(Event::Input(ev)).unwrap();
+                }
             }
         }
     });

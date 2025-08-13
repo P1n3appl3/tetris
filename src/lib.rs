@@ -59,7 +59,7 @@ pub enum InputEvent {
     // maybe pull these out along with Garbage/Pause/StartSound to a "misc" event
     Restart,
     Quit,
-    // Undo,
+    Undo,
     // Redo,
     // Garbage(n) // just for garbage line timer, need special handling to displace current piece upwards
     // Attack(n)
