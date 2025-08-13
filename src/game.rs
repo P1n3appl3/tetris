@@ -9,7 +9,29 @@ use crate::{
 };
 
 pub type Board = [[Cell; 10]; 50]; // hope no one stacks higher than this 👀
-                                   //
+
+#[derive(Clone)]
+pub enum Mode {
+    Sprint { target_lines: Option<u16> },
+    Zen {},
+}
+
+impl Mode {
+    pub fn is_complete(&self, lines: u16) -> bool {
+        match self {
+            Mode::Sprint { target_lines: Some(target_lines) } => *target_lines >= lines,
+            _ => false,
+        }
+    }
+
+    fn allows_undo(&self) -> bool {
+        match self {
+            Mode::Sprint { .. } => false,
+            Mode::Zen {} => true,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Moment {
     pub board: [[Cell; 10]; 50], // hope no one stacks higher than this 👀
@@ -25,7 +47,7 @@ pub struct Game {
     pub current: (Piece, (i8, i8), Rotation),
     pub hold: Option<Piece>,
     pub lines: u16,
-    pub target_lines: Option<u16>,
+    pub mode: Mode,
     pub config: Config,
     pub timers: VecDeque<(Instant, TimerEvent)>,
     pub time: Instant,
@@ -50,7 +72,7 @@ impl Game {
             current: (Piece::I, (3, 21), Rotation::North),
             hold: None,
             lines: 0,
-            target_lines: Some(40),
+            mode: Mode::Sprint { target_lines: Some(40) },
             timers: Default::default(),
             started_right: None,
             started_left: None,
@@ -147,6 +169,9 @@ impl Game {
                 }
             }
             Input(Undo) => {
+                if !self.mode.allows_undo() {
+                    return;
+                }
                 let Some(prev) = self.history.pop() else {
                     return;
                 };
@@ -253,7 +278,7 @@ impl Game {
         if self.lock() {
             if self.lines == old_lines {
                 sound.play(sound::Action::Lock).ok();
-            } else if self.lines < self.target_lines.unwrap_or(u16::MAX) {
+            } else if !self.mode.is_complete(self.lines) {
                 sound.play(sound::Action::HardDrop).ok();
             } else {
                 // TODO: maybe just play both at the same time?

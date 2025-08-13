@@ -12,18 +12,18 @@ use std::{
 };
 
 use clap::{
+    builder::{styling::AnsiColor::*, Styles},
     Parser,
-    builder::{Styles, styling::AnsiColor::*},
 };
 use directories::ProjectDirs;
 use graphics::RawMode;
 use input::EventLoop;
-use log::{LevelFilter, debug, error};
+use log::{debug, error, LevelFilter};
 use rand::prelude::*;
 use tetris::{
-    Event, Game, GameState, InputEvent,
     replay::Replay,
     sound::{Sink, SoundPlayer},
+    Event, Game, GameState, InputEvent, Mode,
 };
 use web_time::Instant;
 
@@ -77,8 +77,11 @@ fn main() {
     let _mode = RawMode::enter();
     let input = EventLoop::start(keys);
     let mut game = Game::new(config);
-    game.target_lines =
-        if args.practice { None } else { Some(args.lines.map(u16::from).unwrap_or(40)) };
+    game.mode = if args.practice {
+        Mode::Zen {}
+    } else {
+        Mode::Sprint { target_lines: Some(args.lines.map(u16::from).unwrap_or(40)) }
+    };
     let replay_dir = args.replay_dir.unwrap_or_else(|| {
         let d = dirs.data_dir().join("replays");
         fs::create_dir_all(&d).ok();
@@ -106,9 +109,9 @@ fn run_game(
     graphics::draw(width as i16, height as i16, game).unwrap();
 
     let done = loop {
+        use mpsc::RecvTimeoutError::*;
         use GameState::*;
         use InputEvent::*;
-        use mpsc::RecvTimeoutError::*;
         let now = Instant::now();
         let redraw_timeout = Duration::from_millis(if game.state == Done { 10000 } else { 100 });
         let deadline = game
@@ -157,10 +160,7 @@ fn run_game(
         graphics::draw(width as i16, height as i16, game).unwrap();
     };
 
-    if game.state == GameState::Done
-        && let Some(target) = game.target_lines
-        && game.lines >= target
-    {
+    if game.state == GameState::Done && game.mode.is_complete(game.lines) {
         replay.length = (game.end_time.unwrap() - game.start_time.unwrap()).as_millis() as u32;
         save_replay(&mut replay, replay_dir);
     }

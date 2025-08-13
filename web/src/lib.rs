@@ -43,6 +43,7 @@ pub async fn main() -> Result<(), JsValue> {
     let (mut raf_loop, _canceler) = wasm_repeated_animation_frame::RafLoop::new();
     let mut fps = fps::FPSCounter::new();
     let mut game = Game::new(config);
+    game.mode = tetris::Mode::Zen {};
     info!("starting event loop");
     let start_time = Instant::now();
     // TODO: timers
@@ -59,7 +60,7 @@ pub async fn main() -> Result<(), JsValue> {
             let now = Instant::now();
             let t = (now - start_time).as_secs_f64();
             timer_div.set_text_content(Some(&format!("{t:.2}")));
-            if let Some(target) = game.target_lines {
+            if let tetris::Mode::Sprint { target_lines: Some(target) } = game.mode {
                 right_info_div
                     .set_text_content(Some(&format!("{}", target.saturating_sub(game.lines))));
             }

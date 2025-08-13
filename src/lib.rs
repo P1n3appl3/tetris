@@ -11,6 +11,7 @@ use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
 pub use game::Game;
+pub use game::Mode;
 
 pub type Pos = [(i8, i8); 4];
 
