@@ -1,12 +1,11 @@
-use image::{ImageFormat, imageops::FilterType};
-use log::info;
-use tetris::{Cell, Color, Game, GameState, Piece, Rotation};
+use image::{imageops::FilterType, ImageFormat};
+use tetris::{Cell, Game, GameState, Piece, Rotation};
 use ultraviolet::DVec3;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    Blob, CanvasRenderingContext2d, HtmlCanvasElement, ImageBitmap, ImageData, Response,
     js_sys::{Uint8Array, Uint8ClampedArray},
+    Blob, CanvasRenderingContext2d, HtmlCanvasElement, ImageBitmap, ImageData, Response,
 };
 
 const SIZE: usize = 24;
@@ -37,8 +36,6 @@ pub fn draw_board(
     skin: &Skin,
     t: f64,
 ) -> Result<(), JsValue> {
-    let window = web_sys::window().unwrap();
-    let document = window.document().expect("Could not get document");
     let cx = canvas.get_context("2d")?.unwrap().dyn_into::<CanvasRenderingContext2d>()?;
 
     // rainbow border cuz why not :3
@@ -59,7 +56,7 @@ pub fn draw_board(
                 cx.draw_image_with_image_bitmap(
                     sprite,
                     (x * SIZE) as f64 + border_width,
-                    ((20 - y) * SIZE) as f64 + border_width,
+                    ((19 - y) * SIZE) as f64 + border_width,
                 )?;
             }
         }
@@ -78,28 +75,44 @@ pub fn draw_board(
         cx.draw_image_with_image_bitmap(
             sprite,
             x as f64 * SIZE as f64 + border_width,
-            (20 - y) as f64 * SIZE as f64 + border_width,
+            (19 - y) as f64 * SIZE as f64 + border_width,
         )?;
     }
     Ok(())
 }
 
-fn draw_piece(canvas: &HtmlCanvasElement, piece: Piece, origin: (i16, i16)) -> Result<(), JsValue> {
+fn draw_piece(
+    canvas: &HtmlCanvasElement,
+    skin: &Skin,
+    piece: Piece,
+    origin: (i16, i16),
+) -> Result<(), JsValue> {
     let cx = canvas.get_context("2d")?.unwrap().dyn_into::<CanvasRenderingContext2d>()?;
     let pos = piece.get_pos(Rotation::North, (origin.0 as i8, origin.1 as i8));
     let (x, y) = origin;
-    for p in pos {
-        info!("{p:?}");
-        let (r, g, b) = piece.color();
-        cx.set_fill_style_str(&format!("rgb({r}, {g}, {b})"));
-        let x = x + p.0 as i16 * SIZE as i16;
-        let y = y + p.1 as i16 * SIZE as i16;
-        cx.fill_rect(x as _, y as _, SIZE as _, SIZE as _);
+    let sprite = skindex(Cell::Piece(piece)).map(|i| &skin[i]).unwrap();
+    // info!("origin:{origin:?}");
+    // info!("pos:{pos:?}");
+    for dy in 0..4 {
+        for dx in 0..4 {
+            if pos.contains(&((x + dx) as _, (y - dy) as _)) {
+                let x = (x + dx as i16) * SIZE as i16;
+                let y = (y + dy as i16) * SIZE as i16;
+                cx.draw_image_with_image_bitmap(sprite, x as f64, y as f64)?;
+            }
+        }
     }
     Ok(())
 }
 
 pub fn draw_hold(game: &Game, canvas: &HtmlCanvasElement, skin: &Skin) -> Result<(), JsValue> {
+    let cx = canvas.get_context("2d")?.unwrap().dyn_into::<CanvasRenderingContext2d>()?;
+    cx.set_fill_style_str("rgb(1, 240, 3)");
+    cx.fill_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
+    if let Some(piece) = game.hold {
+        let origin = (0, 0);
+        draw_piece(canvas, skin, piece, origin)?;
+    }
     Ok(())
 }
 
@@ -109,13 +122,12 @@ pub fn draw_queue(
     skin: &Skin,
     depth: usize,
 ) -> Result<(), JsValue> {
-    let window = web_sys::window().unwrap();
     let cx = canvas.get_context("2d")?.unwrap().dyn_into::<CanvasRenderingContext2d>()?;
     // cx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
     cx.set_fill_style_str("rgb(1, 240, 3)");
     cx.fill_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
-    for i in 0..9 {
-        cx.draw_image_with_image_bitmap(&skin[i], 20.0, (i * SIZE) as f64 + 20.0)?;
+    for piece in game.upcomming.iter().take(depth).enumerate() {
+        draw_piece(canvas, skin, *piece.1, (0, 3 * piece.0 as i16))?;
     }
     Ok(())
 }
