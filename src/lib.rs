@@ -16,7 +16,6 @@ pub use game::Mode;
 pub type Pos = [(i8, i8); 4];
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[repr(u8)]
 pub enum Piece {
     I,
     J,
@@ -35,7 +34,6 @@ pub enum Spin {
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[repr(u8)]
 pub enum Rotation {
     #[default]
     North,
@@ -108,7 +106,7 @@ pub struct Config {
     pub das: u16,
     pub arr: u16,
     pub gravity: u16,
-    pub soft_drop: u16,
+    pub soft_drop: u16, // TODO: add support for 0 for instant
     pub lock_delay: (u16, u16, u16),
     pub ghost: bool,
 }

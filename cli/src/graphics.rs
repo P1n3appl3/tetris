@@ -12,6 +12,7 @@ use std::{
 
 use anyhow::{Result, anyhow};
 use log::error;
+use ringbuffer::RingBuffer;
 use termios::*;
 use tetris::{BG_COLOR, Color, Game, GameState, LOST_COLOR, Mode, Piece, Rotation};
 use web_time::Instant;

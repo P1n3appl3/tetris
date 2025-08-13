@@ -1,4 +1,5 @@
 use image::{ImageFormat, imageops::FilterType};
+use ringbuffer::RingBuffer;
 use tetris::{Cell, Game, GameState, Piece, Rotation};
 use ultraviolet::DVec3;
 use wasm_bindgen::prelude::*;

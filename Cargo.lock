@@ -379,6 +379,7 @@ dependencies = [
  "log-panics",
  "rand 0.9.2",
  "reqwest",
+ "ringbuffer",
  "rodio",
  "serde_json",
  "strum",
@@ -581,7 +582,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -633,7 +634,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "778e2ac28f6c47af28e4907f13ffd1e1ddbd400980a9abd7c8df189bf578a5ad"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1988,6 +1989,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ringbuffer"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57b0b88a509053cbfd535726dcaaceee631313cef981266119527a1d110f6d2b"
+
+[[package]]
 name = "rodio"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2015,7 +2022,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2475,6 +2482,7 @@ dependencies = [
  "fumen",
  "log",
  "rand 0.9.2",
+ "ringbuffer",
  "serde",
  "strum",
  "web-time",
@@ -2856,6 +2864,7 @@ dependencies = [
  "getrandom 0.3.3",
  "image",
  "log",
+ "ringbuffer",
  "tetris",
  "ultraviolet",
  "wasm-bindgen",

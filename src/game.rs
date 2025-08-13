@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 
 use log::debug;
+use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use web_time::Instant;
 
 use crate::{
@@ -38,13 +39,13 @@ pub struct Moment {
     pub board: [[Cell; 10]; 50],
     pub current: Piece,
     pub hold: Option<Piece>,
-    pub upcomming: VecDeque<Piece>,
+    pub upcomming: ConstGenericRingBuffer<Piece, 14>,
 }
 
 #[derive(Clone)]
 pub struct Game {
     pub board: Board,
-    pub upcomming: VecDeque<Piece>,
+    pub upcomming: ConstGenericRingBuffer<Piece, 14>,
     pub current: (Piece, (i8, i8), Rotation),
     pub hold: Option<Piece>,
     pub lines: u16,
@@ -340,7 +341,7 @@ impl Game {
     }
 
     fn pop_piece(&mut self) -> Piece {
-        let next = self.upcomming.pop_front().unwrap();
+        let next = self.upcomming.dequeue().unwrap();
         if self.upcomming.len() < 7 {
             self.fill_bag();
         }

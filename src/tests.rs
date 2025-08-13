@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use fumen::{CellColor, Fumen, PieceType, RotationState};
+use ringbuffer::RingBuffer;
 
 // use pretty_assertions::assert_eq;
 use super::{InputEvent::*, *};
@@ -120,7 +121,7 @@ where
     g.board = get_board(first);
     let temp = g.current.0;
     g.current = get_piece(first);
-    g.upcomming.push_back(temp); // so we don't run out when we harddrop
+    g.upcomming.enqueue(temp); // so we don't run out when we harddrop
     println!("{}", render(g.board, g.current));
     assert_eq!(events.len(), f.pages.len() - 1);
     for (i, (events, page)) in events.zip(f.pages[1..].iter()).enumerate() {
