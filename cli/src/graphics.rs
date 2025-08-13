@@ -10,10 +10,10 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use log::error;
 use termios::*;
-use tetris::{Color, Game, GameState, Mode, Piece, Rotation, BG_COLOR, LOST_COLOR};
+use tetris::{BG_COLOR, Color, Game, GameState, LOST_COLOR, Mode, Piece, Rotation};
 use web_time::Instant;
 
 macro_rules! csi {

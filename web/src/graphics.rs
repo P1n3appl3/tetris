@@ -1,11 +1,12 @@
-use image::{imageops::FilterType, ImageFormat};
+use image::{ImageFormat, imageops::FilterType};
+use log::info;
 use tetris::{Cell, Game, GameState, Piece, Rotation};
 use ultraviolet::DVec3;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    js_sys::{Uint8Array, Uint8ClampedArray},
     Blob, CanvasRenderingContext2d, HtmlCanvasElement, ImageBitmap, ImageData, Response,
+    js_sys::{Uint8Array, Uint8ClampedArray},
 };
 
 const SIZE: usize = 24;
@@ -78,6 +79,7 @@ pub fn draw_board(
             (19 - y) as f64 * SIZE as f64 + border_width,
         )?;
     }
+    cx.set_global_alpha(1.0);
     Ok(())
 }
 
@@ -89,10 +91,8 @@ fn draw_piece(
 ) -> Result<(), JsValue> {
     let cx = canvas.get_context("2d")?.unwrap().dyn_into::<CanvasRenderingContext2d>()?;
     let pos = piece.get_pos(Rotation::North, (origin.0 as i8, origin.1 as i8));
-    let (x, y) = origin;
     let sprite = skindex(Cell::Piece(piece)).map(|i| &skin[i]).unwrap();
-    // info!("origin:{origin:?}");
-    // info!("pos:{pos:?}");
+    let (x, y) = origin;
     for dy in 0..4 {
         for dx in 0..4 {
             if pos.contains(&((x + dx) as _, (y - dy) as _)) {
