@@ -10,10 +10,10 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use log::error;
 use termios::*;
-use tetris::{Color, Game, GameState, Piece, Rotation, BG_COLOR, LOST_COLOR};
+use tetris::{Color, Game, GameState, Mode, Piece, Rotation, BG_COLOR, LOST_COLOR};
 use web_time::Instant;
 
 macro_rules! csi {
@@ -56,7 +56,7 @@ pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
         )?;
     }
     let text_color = (255, 255, 255);
-    if let Some(target) = game.target_lines {
+    if let Mode::Sprint { target_lines: Some(target) } = game.mode {
         draw_text(
             o,
             (ox + 34, oy + 20),
