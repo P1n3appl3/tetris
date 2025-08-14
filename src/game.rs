@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use log::debug;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
-use web_time::Instant;
+use web_time::{Instant, SystemTime};
 
 use crate::{
     sound::{Sink, SoundPlayer},
@@ -88,15 +88,18 @@ impl Game {
         }
     }
 
-    pub fn start(&mut self, seed: u64, sound: &SoundPlayer<impl Sink>) {
+    pub fn start(&mut self, seed: Option<u64>, sound: &SoundPlayer<impl Sink>) {
         self.state = GameState::Startup;
         self.board = [[Cell::Empty; 10]; 50];
         self.hold = None;
         self.lines = 0;
         self.upcomming.clear();
-        self.rng = StdRng::seed_from_u64(seed);
+        self.rng = StdRng::seed_from_u64(seed.unwrap_or_else(|| {
+            SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64
+        }));
         self.fill_bag();
         self.time = Instant::now();
+        self.start_time = None;
         if matches!(self.mode, Mode::Sprint { .. }) {
             while let Some(Piece::Z | Piece::S) = self.upcomming.front() {
                 self.pop_piece();
