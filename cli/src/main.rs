@@ -103,7 +103,7 @@ fn run_game(
 
     let seed = rand::rng().random();
     let mut replay = Replay::new(game.config, seed);
-    game.start(seed, player);
+    game.start(Some(seed), player);
     replay.start();
 
     graphics::draw(width as i16, height as i16, game).unwrap();

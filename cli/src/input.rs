@@ -71,7 +71,7 @@ impl EventLoop {
             let mut buf = [0; 64];
             loop {
                 let n = stdin.read(&mut buf).unwrap();
-                log::info!("{:?}", parse_kitty_key(&buf[..n]));
+                log::trace!("{:?}", parse_kitty_key(&buf[..n]));
                 if let Ok(k) = parse_kitty_key(&buf[..n]) {
                     if let Some(&ev) = keymap.get(&k) {
                         tx.send(ev).unwrap();

@@ -3,6 +3,7 @@ use std::{fs, path::Path, str::FromStr};
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
+use rodio::Source;
 use tetris::{
     Config,
     sound::{Action, Clear, Meta, Sink, SoundPlayer},
@@ -81,7 +82,13 @@ pub fn load(
                     && let Ok(variant) = Meta::from_str(node.name().value()).map(Into::into)
                     && let Ok(decoded) = Rodio::decode(&path)
                 {
-                    sound.sounds.insert(variant, decoded);
+                    let volume = node
+                        .entries()
+                        .get(1)
+                        .map(KdlEntry::value)
+                        .and_then(KdlValue::as_float)
+                        .unwrap_or(1.0);
+                    sound.sounds.insert(variant, decoded.amplify_normalized(volume as f32));
                 } else {
                     log::warn!("failed to load sound for '{}'", node.name().value())
                 }
@@ -97,7 +104,13 @@ pub fn load(
                     && let Ok(variant) = Action::from_str(node.name().value()).map(Into::into)
                     && let Ok(decoded) = Rodio::decode(&path)
                 {
-                    sound.sounds.insert(variant, decoded);
+                    let volume = node
+                        .entries()
+                        .get(1)
+                        .map(KdlEntry::value)
+                        .and_then(KdlValue::as_float)
+                        .unwrap_or(1.0);
+                    sound.sounds.insert(variant, decoded.amplify_normalized(volume as f32));
                 } else {
                     log::warn!("failed to load sound for '{}'", node.name().value())
                 }
@@ -113,7 +126,13 @@ pub fn load(
                     && let Ok(variant) = Clear::from_str(node.name().value()).map(Into::into)
                     && let Ok(decoded) = Rodio::decode(&path)
                 {
-                    sound.sounds.insert(variant, decoded);
+                    let volume = node
+                        .entries()
+                        .get(1)
+                        .map(KdlEntry::value)
+                        .and_then(KdlValue::as_float)
+                        .unwrap_or(1.0);
+                    sound.sounds.insert(variant, decoded.amplify_normalized(volume as f32));
                 } else {
                     log::warn!("failed to load sound for '{}'", node.name().value())
                 }

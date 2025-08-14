@@ -2,14 +2,14 @@ use std::{fs::File, path::Path};
 
 use anyhow::Result;
 use rodio::{
-    Decoder, OutputStream, OutputStreamBuilder, source::Source, static_buffer::StaticSamplesBuffer,
+    source::{Amplify, Source}, static_buffer::StaticSamplesBuffer, Decoder, OutputStream, OutputStreamBuilder
 };
 
 use tetris::sound;
 
 pub struct Rodio {
     pub volume: f64,
-    stream: OutputStream,
+    pub stream: OutputStream,
 }
 
 impl Rodio {
@@ -30,12 +30,13 @@ impl Rodio {
 }
 
 impl sound::Sink for Rodio {
-    type Asset = StaticSamplesBuffer;
+    type Asset = Amplify<StaticSamplesBuffer>;
     // TODO: cloning the sound on every play seems bad. even if volume is dynamic it
     // should maybe cache the amplified sounds
     fn play(&self, s: &Self::Asset) -> Result<()> {
         let sink = rodio::Sink::connect_new(self.stream.mixer());
-        sink.append(s.clone().amplify_normalized(self.volume as f32));
+        sink.append(s.clone());
+        sink.set_volume(self.volume as f32);
         sink.detach();
         Ok(())
     }

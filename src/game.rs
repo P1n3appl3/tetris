@@ -5,7 +5,7 @@ use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use web_time::{Instant, SystemTime};
 
 use crate::{
-    sound::{Sink, SoundPlayer},
+    sound::{Action, Clear, Meta, Sink, Sound, SoundPlayer},
     *,
 };
 
@@ -59,6 +59,7 @@ pub struct Game {
     pub end_time: Option<Instant>,
     pub soft_dropping: bool,
     pub can_hold: bool,
+    pub spin: bool, // TODO: detection
     pub state: GameState,
     pub rng: StdRng,
     pub history: VecDeque<Moment>,
@@ -83,6 +84,7 @@ impl Game {
             end_time: None,
             soft_dropping: false,
             can_hold: true,
+            spin: false,
             state: GameState::Done,
             history: VecDeque::new(),
         }
@@ -105,7 +107,7 @@ impl Game {
                 self.pop_piece();
             }
         }
-        sound.play(sound::Meta::Go).ok();
+        sound.play(Meta::Go).ok();
         // TODO: combine "ready" and "go" sounds
         // TODO: make startup time configurable or maybe even based on the sound length?
         self.timers.clear();
@@ -119,7 +121,7 @@ impl Game {
         match event {
             Input(PressLeft) => {
                 if self.state == Running && self.try_move((-1, 0)) {
-                    sound.play(sound::Action::Move).ok();
+                    sound.play(Action::Move).ok();
                 }
                 self.started_left = Some(time);
                 self.clear_timer(DasRight);
@@ -128,7 +130,7 @@ impl Game {
             }
             Input(PressRight) => {
                 if self.state == Running && self.try_move((1, 0)) {
-                    sound.play(sound::Action::Move).ok();
+                    sound.play(Action::Move).ok();
                 }
                 self.started_right = Some(time);
                 self.clear_timer(DasLeft);
@@ -162,16 +164,16 @@ impl Game {
             Input(Hold) => {
                 if self.can_hold {
                     if !self.hold() {
-                        sound.play(sound::Meta::Lose).ok();
+                        sound.play(Meta::Lose).ok();
                         self.state = Done;
                         self.end_time = Some(self.time);
                         self.timers.clear();
                     } else {
-                        sound.play(sound::Action::Hold).ok();
+                        sound.play(Action::Hold).ok();
                         self.can_hold = false;
                     }
                 } else {
-                    sound.play(sound::Action::NoHold).ok();
+                    sound.play(Action::NoHold).ok();
                 }
             }
             Input(Undo) => {
@@ -214,10 +216,11 @@ impl Game {
                 let next = self.pop_piece();
                 self.spawn(next);
                 self.start_time = Some(time);
+                sound.play(Meta::Go).ok();
             }
             Input(rot @ (Cw | Ccw | Flip)) => {
                 if self.try_rotate(rot.try_into().expect("should always be a rotation")) {
-                    sound.play(sound::Action::Rotate).ok();
+                    sound.play(Action::Rotate).ok();
                 }
                 // confirmed: jstris resets it even if you don't successfully rotate
                 self.clear_timer(Lock);
@@ -295,18 +298,25 @@ impl Game {
         let old_lines = self.lines;
         // TODO: redo with "piece placement result struct"
         if self.lock() {
-            if self.lines == old_lines {
-                sound.play(sound::Action::Lock).ok();
-            } else if !self.mode.is_complete(self.lines) {
-                // TODO: only output this sound when pressing harddrop
-                sound.play(sound::Action::HardDrop).ok();
-            } else {
-                // TODO: maybe just play both at the same time?
-                sound.play(sound::Meta::Win).or_else(|_| sound.play(sound::Clear::Single)).ok();
+            // TODO: maybe just play both at the same time?
+            let effect: Sound = match (self.lines - old_lines, self.spin) {
+                (0, _) => Action::Lock.into(), // TODO: differentiate lock/harddrop
+                (1, false) => Clear::Single.into(),
+                (1, true) => Clear::Tspin.into(),
+                (2, false) => Clear::Double.into(),
+                (2, true) => Clear::TspinDouble.into(),
+                (3, false) => Clear::Triple.into(),
+                (3, true) => Clear::TSpinTriple.into(),
+                (4, _) => Clear::Quad.into(),
+                _ => unreachable!("impossible line clear"),
+            };
+            sound.play(effect).ok();
+            if self.mode.is_complete(self.lines) {
+                sound.play(Meta::Win).or_else(|_| sound.play(Clear::Single)).ok();
                 self.finish();
             }
         } else {
-            sound.play(sound::Meta::Lose).ok();
+            sound.play(Meta::Lose).ok();
             self.finish();
         }
     }

@@ -1,27 +1,27 @@
 // reserved keys:
 // "q" / ctrl+c: quit
 // "r": restart
-bindings {
-    left "left"
-    right "right"
-    soft "down"
-    cw "x"
-    ccw "z"
-    hard "up"
-    flip "a"
-    hold "shift"
-}
-
 // bindings {
-//     right "l"
-//     soft "k"
-//     left "j"
-//     hard "space"
-//     cw "f"
-//     ccw "d"
-//     flip "s"
-//     hold "a"
+//     left "left"
+//     right "right"
+//     soft "down"
+//     cw "x"
+//     ccw "z"
+//     hard "up"
+//     flip "a"
+//     hold "shift"
 // }
+
+bindings {
+    right "l"
+    soft "k"
+    left "j"
+    hard "space"
+    cw "f"
+    ccw "d"
+    flip "s"
+    hold "a"
+}
 
 // all values are specified in frames, fractions are allowed
 config {
@@ -44,20 +44,22 @@ config {
 // TODO: add puyo-puyo tetris example config (9f das, 2f arr, variable are/line delay)
 
 sound {
-    volume 0.3
+    volume 0.8
     meta {
-        ready #null
-        go #null
-        lose "https://s.jezevec10.com/res/se0/topout.wav"
-        // win "path/to/win.wav"
+        ready "https://ecdldaiiere.github.io/Eddiez-Soundz/TFready.mp3"
+        go "https://ecdldaiiere.github.io/Eddiez-Soundz/TFgo.mp3"
+        lose "https://ecdldaiiere.github.io/Eddiez-Soundz/TFdied.mp3"
     }
     action {
-        move "https://s.jezevec10.com/res/se0/move.wav"
-        rotate #null
-        lock "https://s.jezevec10.com/res/se0/lock.wav"
-        hold "https://s.jezevec10.com/res/se0/hold.wav"
+        move "https://ecdldaiiere.github.io/Eddiez-Soundz/TFmove.mp3"
+        rotate "https://ecdldaiiere.github.io/Eddiez-Soundz/TF_rotate.mp3"
+        lock "https://ecdldaiiere.github.io/Eddiez-Soundz/TFlock.mp3"
+        hold "https://ecdldaiiere.github.io/Eddiez-Soundz/TFhold.mp3"
+        spin "https://jstrisplus.github.io/jstris-plus-assets/sfxPacks/tetrio/spin.ogg"
     }
     clear {
-        single "https://s.jezevec10.com/res/se0/linefall.wav"
+        single "https://jstrisplus.github.io/jstris-plus-assets/sfxPacks/tetrio/clearline.ogg" 0.7
+        quad "https://jstrisplus.github.io/jstris-plus-assets/sfxPacks/tetrio/clearquad.ogg" 0.7
+        tspin "https://jstrisplus.github.io/jstris-plus-assets/sfxPacks/tetrio/clearspin.ogg" 0.7
     }
 }
