@@ -1,6 +1,8 @@
 mod game;
 pub mod replay;
-pub mod settings;
+pub mod sound;
+#[cfg(test)]
+mod tests;
 
 use std::time::Duration;
 
@@ -9,6 +11,7 @@ use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
 pub use game::Game;
+pub use game::Mode;
 
 pub type Pos = [(i8, i8); 4];
 
@@ -81,7 +84,6 @@ impl PieceLocation {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, PartialOrd, Ord)]
-// #[repr(u8)]
 pub enum Piece {
     I,
     J,
@@ -141,7 +143,6 @@ pub enum Spin {
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[repr(u8)]
 pub enum Rotation {
     #[default]
     North,
@@ -224,44 +225,42 @@ pub enum Event {
     Input(InputEvent),
 }
 
+impl From<TimerEvent> for Event {
+    fn from(t: TimerEvent) -> Self {
+        Self::Timer(t)
+    }
+}
+
+impl From<InputEvent> for Event {
+    fn from(i: InputEvent) -> Self {
+        Self::Input(i)
+    }
+}
+
 const FRAME: Duration = Duration::from_nanos(16_666_667);
 
 // TODO: make all these floats (maybe ms instead of frames?)
 // TODO: find jstris softdrop delays and match them
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Config {
     pub das: u16,
     pub arr: u16,
     pub gravity: Option<u16>,
-    pub soft_drop: u16,
+    pub soft_drop: u16, // TODO: add support for 0 for instant
     pub lock_delay: (u16, u16, u16),
     pub ghost: bool,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Bindings {
-    pub left: char,
-    pub right: char,
-    pub soft: char,
-    pub hard: char,
-    pub cw: char,
-    pub ccw: char,
-    pub flip: char,
-    pub hold: char,
-}
-
-impl Default for Bindings {
+impl Default for Config {
     fn default() -> Self {
-        use settings::keys::*;
         Self {
-            left: LEFT,
-            right: RIGHT,
-            soft: DOWN,
-            hard: UP,
-            cw: 'x',
-            ccw: 'z',
-            flip: 'a',
-            hold: LEFT_SHIFT,
+            das: 10,
+            arr: 2,
+            gravity: Some(60),
+            soft_drop: 4,
+            lock_delay: (30, 300, 1200),
+            ghost: true,
         }
     }
 }
@@ -332,12 +331,36 @@ impl Piece {
     }
 }
 
-pub trait Sound {
-    // TODO: asyncify this to lazy-load sounds while playing
-    // TODO: handle url instead of just path, download to cache
-    fn add_sound(&mut self, name: &str, resource: &str) -> Result<()>;
-    fn set_volume(&mut self, level: f32);
-    fn play(&self, s: &str) -> Result<()>;
+pub const BG_COLOR: (u8, u8, u8) = (20, 20, 20);
+// const DONE_COLOR: (u8, u8, u8) = (106, 106, 106);
+pub const LOST_COLOR: (u8, u8, u8) = (106, 106, 106); // TODO: differentiate from DONE
+
+pub trait Color {
+    fn color(self) -> (u8, u8, u8);
+}
+
+impl Color for Piece {
+    fn color(self) -> (u8, u8, u8) {
+        match self {
+            Piece::I => (15, 155, 215),
+            Piece::J => (33, 65, 198),
+            Piece::L => (227, 91, 2),
+            Piece::O => (227, 159, 2),
+            Piece::S => (89, 177, 1),
+            Piece::T => (175, 41, 138),
+            Piece::Z => (215, 15, 55),
+        }
+    }
+}
+
+impl Color for Cell {
+    fn color(self) -> (u8, u8, u8) {
+        match self {
+            Cell::Piece(piece) => piece.color(),
+            Cell::Garbage => LOST_COLOR,
+            Cell::Empty => (0, 0, 0),
+        }
+    }
 }
 
 impl TryFrom<InputEvent> for Spin {
@@ -353,21 +376,8 @@ impl TryFrom<InputEvent> for Spin {
     }
 }
 
-const ROTI: [[(i8, i8); 5]; 12] = [
-    [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)], // n -> e
-    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)], // e -> n
-    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)], // e -> s
-    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)], // s -> e
-    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)], // s -> w
-    [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)], // w -> s
-    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)], // w -> n
-    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)], // n -> w
-    [(0, 0), (0, 1), (0, 0), (0, 0), (0, 0)],    // n -> s
-    [(0, 0), (0, -1), (0, 0), (0, 0), (0, 0)],   // s -> n
-    [(0, 0), (1, 0), (0, 0), (0, 0), (0, 0)],    // e -> w
-    [(0, 0), (-1, 0), (0, 0), (0, 0), (0, 0)],   // w -> e
-];
-
+// SRS kicks from: https://harddrop.com/wiki/SRS#How_guideline_SRS_actually_works
+// 180 kicks from: https://tetrio.wiki.gg/images/5/52/TETR.IO_180kicks.png?6d5d9d
 const ROTJLSTZ: [[(i8, i8); 5]; 12] = [
     [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)], // n -> e
     [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],     // e -> n
@@ -381,4 +391,21 @@ const ROTJLSTZ: [[(i8, i8); 5]; 12] = [
     [(0, 0), (0, -1), (0, 0), (0, 0), (0, 0)],     // s -> n
     [(0, 0), (1, 0), (0, 0), (0, 0), (0, 0)],      // e -> w
     [(0, 0), (-1, 0), (0, 0), (0, 0), (0, 0)],     // w -> e
+];
+
+// I spins are slightly asymetrical, see https://harddrop.com/wiki/I-spins_in_SRS
+// (yum)
+const ROTI: [[(i8, i8); 5]; 12] = [
+    [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)], // n -> e
+    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)], // e -> n
+    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)], // e -> s
+    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)], // s -> e
+    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)], // s -> w
+    [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)], // w -> s
+    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)], // w -> n
+    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)], // n -> w
+    [(0, 0), (0, 1), (0, 0), (0, 0), (0, 0)],    // n -> s
+    [(0, 0), (0, -1), (0, 0), (0, 0), (0, 0)],   // s -> n
+    [(0, 0), (1, 0), (0, 0), (0, 0), (0, 0)],    // e -> w
+    [(0, 0), (-1, 0), (0, 0), (0, 0), (0, 0)],   // w -> e
 ];

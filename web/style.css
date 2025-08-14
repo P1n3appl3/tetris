@@ -1,0 +1,107 @@
+html {
+    background-color: rgb(17, 17, 17);
+    color: lavenderblush;
+    /*TODO: ship a font*/
+    font-family:
+        Noto Sans,
+        sans;
+}
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+    gap: 20px;
+}
+canvas {
+    display: inline-block;
+    /*image-rendering: pixelated;
+    image-rendering: crisp-edges*/
+}
+details {
+    display: block;
+    margin-bottom: 10px;
+}
+a {
+    color: #8cb4ff;
+}
+#main {
+    float: left;
+    position: relative;
+    flex-direction: row;
+    width: 500px;
+    transform: translate(0px);
+}
+#left {
+    margin-right: 10px;
+    float: left;
+}
+#center {
+    float: left;
+}
+#right {
+    margin-left: 10px;
+    float: left;
+}
+#board {
+    background: url(https://konsola5.github.io/jstris-customization-database/assets/jstris-grid.png);
+}
+#fps {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    color: mediumaquamarine;
+    font-size: 10px;
+}
+#stats {
+    text-align: center;
+}
+/*TODO: put this at the bottom instead of the right if it doesn't fit*/
+.settings {
+    width: 250px;
+    position: fixed;
+    z-index: 1;
+    top: 0;
+    left: 0;
+    background-color: #111;
+    overflow-x: hidden;
+    padding: 5px;
+    margin-top: 60px;
+    /*transition: 0.5s;*/
+    display: flex;
+    flex-direction: column;
+    /*border: 1px dashed white;*/
+}
+
+.settings details {
+    padding: 5px;
+    border: 1px solid white;
+}
+
+.settings details > div {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 0;
+    border: white;
+}
+
+.settings label {
+    display: flex;
+    gap: 5px;
+    justify-content: space-between;
+}
+
+.settings input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.keybinding {
+    max-width: 100px;
+}
+.num-select  {
+    max-width: 50px;
+}

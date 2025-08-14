@@ -7,8 +7,21 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
+use tetris::InputEvent;
 
-use tetris::{settings::keys::*, InputEvent};
+use crate::settings::keys::*;
+
+#[derive(Copy, Clone, Debug)]
+pub struct Bindings {
+    pub left: char,
+    pub right: char,
+    pub soft: char,
+    pub hard: char,
+    pub cw: char,
+    pub ccw: char,
+    pub flip: char,
+    pub hold: char,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct KeyEvent {
@@ -28,7 +41,7 @@ pub struct EventLoop {
 }
 
 impl EventLoop {
-    pub fn start(bindings: tetris::Bindings) -> Self {
+    pub fn start(bindings: Bindings) -> Self {
         let (tx, rx) = mpsc::channel();
 
         thread::spawn(move || {
@@ -60,7 +73,6 @@ impl EventLoop {
                 (('9', 0, true), ShowSolution(9)),
                 (('0', 0, true), ShowSolution(0)),
                 (('u', 0, true), Undo),
-                // (('r', CTRL, true), Redo),
             ]
             .into_iter()
             .map(|(k, i)| (k.into(), i))
@@ -68,7 +80,8 @@ impl EventLoop {
             let mut buf = [0; 64];
             loop {
                 let n = stdin.read(&mut buf).unwrap();
-                if let Ok(k) = crate::input::parse_kitty_key(&buf[..n]) {
+                log::info!("{:?}", parse_kitty_key(&buf[..n]));
+                if let Ok(k) = parse_kitty_key(&buf[..n]) {
                     if let Some(&ev) = keymap.get(&k) {
                         tx.send(ev).unwrap();
                     }
@@ -104,30 +117,20 @@ fn parse_kitty_key(buf: &[u8]) -> Result<KeyEvent> {
     let s = str::from_utf8(&buf[2..buf.len() - 1]).unwrap();
     let parts: Vec<Vec<u32>> = s
         .split(';')
-        .map(|s| {
-            s.split(':')
-                .map(|s| s.parse().unwrap_or_default())
-                .collect()
-        })
+        .map(|s| s.split(':').map(|s| s.parse().unwrap_or_default()).collect())
         .collect();
-    let code = if trailer == b'u' {
-        char::from_u32(parts[0][0]).unwrap()
-    } else {
-        trailer_map(trailer)
-    };
+    let code =
+        if trailer == b'u' { char::from_u32(parts[0][0]).unwrap() } else { trailer_map(trailer) };
     let (mods, press) = if let Some(v) = parts.get(1) {
         match v[..] {
             [a] | [a, 1] => (a - 1, true),
             [a, 3] => (a - 1, false),
+            // TODO: fix wezterm: https://github.com/wezterm/wezterm/issues/5139
             [_, 2] => return Err(anyhow!("ignore repeats")),
             _ => return Err(anyhow!("unrecognized")),
         }
     } else {
         (0, true)
     };
-    Ok(KeyEvent {
-        key: code,
-        mods: mods as u8,
-        press,
-    })
+    Ok(KeyEvent { key: code, mods: mods as u8, press })
 }

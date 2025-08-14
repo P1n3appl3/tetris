@@ -1,5 +1,6 @@
 mod graphics;
 mod input;
+mod settings;
 mod sound;
 
 use std::{
@@ -7,7 +8,7 @@ use std::{
     num::NonZeroU16,
     path::{Path, PathBuf},
     sync::mpsc,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use clap::{
@@ -19,8 +20,12 @@ use graphics::RawMode;
 use input::EventLoop;
 use log::{debug, error, LevelFilter};
 use rand::prelude::*;
-
-use tetris::{replay::Replay, Event, Game, GameState, InputEvent, Sound};
+use tetris::{
+    replay::Replay,
+    sound::{Sink, SoundPlayer},
+    Event, Game, GameState, InputEvent, Mode,
+};
+use web_time::Instant;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -63,38 +68,19 @@ fn main() {
         fs::create_dir_all(d).ok();
         d.join("log.txt")
     });
-    let level = LevelFilter::iter()
-        .nth(1 + args.verbose as usize)
-        .unwrap_or(LevelFilter::max());
-    ftail::Ftail::new()
-        .single_file(&log_file, true, level)
-        .init()
-        .ok();
+    let level = LevelFilter::iter().nth(1 + args.verbose as usize).unwrap_or(LevelFilter::max());
+    ftail::Ftail::new().single_file(&log_file, true, level).init().ok();
     log_panics::init();
-    let settings = if let Some(path) = args.config {
-        fs::read_to_string(path).expect("Couldn't read settings file")
-    } else {
-        let default_settings_content = include_str!("../settings.kdl");
-        fs::create_dir_all(dirs.config_dir()).ok();
-        let settings_path = dirs.config_dir().join("settings.kdl");
-        match fs::read_to_string(&settings_path) {
-            Ok(s) => s,
-            Err(_) => {
-                fs::write(settings_path, default_settings_content).ok();
-                default_settings_content.to_owned()
-            }
-        }
-    };
-    let mut player = sound::RodioPlayer::new(&dirs).expect("Failed to initialize audio engine");
+    let mut player = sound::Rodio::new().expect("Failed to initialize audio engine").into();
     let (config, keys) =
-        tetris::settings::load(&settings, &mut player).expect("Invalid settings file");
+        settings::load(args.config.as_deref(), &dirs, &mut player).expect("Invalid settings file");
     let _mode = RawMode::enter();
     let input = EventLoop::start(keys);
     let mut game = Game::new(config);
-    game.target_lines = if args.practice {
-        None
+    game.mode = if args.practice {
+        Mode::Practice {}
     } else {
-        Some(args.lines.map(u16::from).unwrap_or(40))
+        Mode::Sprint { target_lines: args.lines.map(u16::from).unwrap_or(40) }
     };
     let replay_dir = args.replay_dir.unwrap_or_else(|| {
         let d = dirs.data_dir().join("replays");
@@ -115,7 +101,12 @@ fn main() {
 //      b. or we might move away from beam search as an approach
 // 3. display the options, either rendered in the UI or printed to the log
 
-fn run_game(game: &mut Game, input: &EventLoop, player: &impl Sound, replay_dir: &Path) -> bool {
+fn run_game(
+    game: &mut Game,
+    input: &EventLoop,
+    player: &SoundPlayer<impl Sink>,
+    replay_dir: &Path,
+) -> bool {
     let eval = &tetrizz::eval::Eval::new(
         -79.400375,
         -55.564907,
@@ -224,7 +215,7 @@ fn run_game(game: &mut Game, input: &EventLoop, player: &impl Sound, replay_dir:
                     if t < now {
                         game.timers.pop_front();
                         debug!(target: "timer","{timer_event:?}");
-                        new_piece |= game.handle(Event::Timer(timer_event), Instant::now(), player);
+                        new_piece |= game.handle(Event::Timer(timer_event), now, player);
                     }
                 }
             }
@@ -234,15 +225,12 @@ fn run_game(game: &mut Game, input: &EventLoop, player: &impl Sound, replay_dir:
             }
         }
 
-        // TODO: draw timers every tenth of a second in a separate loop, checking a "paused"
-        // atomic bool that's set by this thread based on gamestate
+        // TODO: draw timers every tenth of a second in a separate loop, checking a
+        // "paused" atomic bool that's set by this thread based on gamestate
         graphics::draw(width as i16, height as i16, game).unwrap();
     };
 
-    if game.state == GameState::Done
-        && let Some(target) = game.target_lines
-        && game.lines >= target
-    {
+    if game.state == GameState::Done && game.mode.is_complete(game.lines) {
         replay.length = (game.end_time.unwrap() - game.start_time.unwrap()).as_millis() as u32;
         save_replay(&mut replay, replay_dir);
     }
@@ -251,21 +239,13 @@ fn run_game(game: &mut Game, input: &EventLoop, player: &impl Sound, replay_dir:
 
 // TODO: update on sigwinch
 fn get_size() -> (u16, u16) {
-    let mut size = libc::winsize {
-        ws_row: 0,
-        ws_col: 0,
-        ws_xpixel: 0,
-        ws_ypixel: 0,
-    };
+    let mut size = libc::winsize { ws_row: 0, ws_col: 0, ws_xpixel: 0, ws_ypixel: 0 };
     unsafe { libc::ioctl(1, libc::TIOCGWINSZ, &mut size) };
     (size.ws_col, size.ws_row)
 }
 
 fn save_replay(replay: &mut Replay, dir: &Path) {
-    let time = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time went backwards")
-        .as_secs();
+    let time = SystemTime::now().duration_since(UNIX_EPOCH).expect("time went backwards").as_secs();
     let path = dir.join(format!("{time}.json"));
     let raw_replay = serde_json::to_string_pretty(replay).expect("Failed to serialize replay");
     fs::write(&path, &raw_replay).expect("Failed to write replay");
@@ -279,6 +259,5 @@ fn save_replay(replay: &mut Replay, dir: &Path) {
     debug_assert_eq!(*replay, round_trip);
 }
 
-const STYLES: Styles = Styles::styled()
-    .literal(Cyan.on_default().bold())
-    .placeholder(Blue.on_default());
+const STYLES: Styles =
+    Styles::styled().literal(Cyan.on_default().bold()).placeholder(Blue.on_default());

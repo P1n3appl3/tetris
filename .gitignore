@@ -2,10 +2,10 @@
 replays
 **/*.txt
 **/*.games
-
-tags
-tags.temp
-tags.lock
+web/pkg
 
 .direnv
 result
+tags
+tags.temp
+tags.lock

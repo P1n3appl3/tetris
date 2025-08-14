@@ -1,26 +1,57 @@
-use std::{collections::VecDeque, time::Instant};
+use std::collections::VecDeque;
 
+use log::debug;
+use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use tetrizz::beam_search::Node;
+use web_time::Instant;
 
-use crate::*;
+use crate::{
+    sound::{Sink, SoundPlayer},
+    *,
+};
+
+pub type Board = [[Cell; 10]; 50]; // hope no one stacks higher than this 👀
+
+#[derive(Clone)]
+pub enum Mode {
+    Sprint { target_lines: u16 },
+    // Cheese { target_lines: u16 },
+    Practice,
+}
+
+impl Mode {
+    pub fn is_complete(&self, lines: u16) -> bool {
+        match self {
+            &Mode::Sprint { target_lines } => lines >= target_lines,
+            _ => false,
+        }
+    }
+
+    fn allows_undo(&self) -> bool {
+        match self {
+            Mode::Sprint { .. } => false,
+            Mode::Practice {} => true,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Moment {
     pub board: [[Cell; 10]; 50], // hope no one stacks higher than this 👀
     pub current: PieceLocation,
     pub hold: Option<Piece>,
-    pub upcomming: VecDeque<Piece>,
+    pub upcomming: ConstGenericRingBuffer<Piece, 14>,
     pub spins: Vec<Node>,
 }
 
 #[derive(Clone)]
 pub struct Game {
-    pub board: [[Cell; 10]; 50], // hope no one stacks higher than this 👀
-    pub upcomming: VecDeque<Piece>,
+    pub board: Board,
+    pub upcomming: ConstGenericRingBuffer<Piece, 14>,
     pub current: PieceLocation,
     pub hold: Option<Piece>,
     pub lines: u16,
-    pub target_lines: Option<u16>,
+    pub mode: Mode,
     pub config: Config,
     pub timers: VecDeque<(Instant, TimerEvent)>,
     pub time: Instant,
@@ -34,7 +65,7 @@ pub struct Game {
     pub rng: StdRng,
     pub spins: Vec<Node>,
     pub solution: Option<(Node, Box<Game>)>,
-    pub history: Vec<Moment>,
+    pub history: VecDeque<Moment>,
 }
 
 impl Game {
@@ -51,9 +82,7 @@ impl Game {
         (game, queue)
     }
     fn as_tetrizz_board(&self) -> tetrizz::data::Board {
-        let mut board = tetrizz::data::Board {
-            cols: [tetrizz::data::Column(0); 10],
-        };
+        let mut board = tetrizz::data::Board { cols: [tetrizz::data::Column(0); 10] };
         for column in 0..10 {
             for row in 0..50 {
                 if self.board[row][column] != Cell::Empty {
@@ -98,12 +127,7 @@ impl Game {
                 }
             }
         }
-        spins.sort_by_key(|s| {
-            s.moves
-                .iter()
-                .take_while(|m| m.1.lines_cleared == 0)
-                .count()
-        });
+        spins.sort_by_key(|s| s.moves.iter().take_while(|m| m.1.lines_cleared == 0).count());
         spins
     }
 }
@@ -115,10 +139,10 @@ impl Game {
             rng: StdRng::from_os_rng(),
             board: [[Cell::Empty; 10]; 50],
             upcomming: Default::default(),
-            current: PieceLocation::new(Piece::I, (0, 0), Rotation::North),
+            current: PieceLocation::new(Piece::I, (3, 21), Rotation::North),
             hold: None,
             lines: 0,
-            target_lines: Some(40),
+            mode: Mode::Sprint { target_lines: 40 },
             timers: Default::default(),
             started_right: None,
             started_left: None,
@@ -130,11 +154,11 @@ impl Game {
             state: GameState::Done,
             spins: Default::default(),
             solution: None,
-            history: vec![],
+            history: VecDeque::new(),
         }
     }
 
-    pub fn start(&mut self, seed: u64, player: &impl Sound) {
+    pub fn start(&mut self, seed: u64, sound: &SoundPlayer<impl Sink>) {
         self.state = GameState::Startup;
         self.board = [[Cell::Empty; 10]; 50];
         self.hold = None;
@@ -143,23 +167,26 @@ impl Game {
         self.rng = StdRng::seed_from_u64(seed);
         self.fill_bag();
         self.time = Instant::now();
-        while let Some(Piece::Z | Piece::S) = self.upcomming.front() {
-            self.pop_piece();
+        if matches!(self.mode, Mode::Sprint { .. }) {
+            while let Some(Piece::Z | Piece::S) = self.upcomming.front() {
+                self.pop_piece();
+            }
         }
-        player.play("start").ok();
+        sound.play(sound::Meta::Go).ok();
         // TODO: combine "ready" and "go" sounds
-        // TODO: make startup time configurable
+        // TODO: make startup time configurable or maybe even based on the sound length?
         self.timers.clear();
         self.set_timer(TimerEvent::Start);
     }
 
-    pub fn handle(&mut self, event: Event, time: Instant, player: &impl Sound) -> bool {
+    pub fn handle(&mut self, event: Event, time: Instant, sound: &SoundPlayer<impl Sink>) -> bool {
         use {Event::*, GameState::*, InputEvent::*, TimerEvent::*};
         self.time = time;
+        debug!("handling event: {event:?}");
         match event {
             Input(PressLeft) => {
                 if self.state == Running && self.try_move((-1, 0)) {
-                    player.play("move").ok();
+                    sound.play(sound::Action::Move).ok();
                 }
                 self.started_left = Some(time);
                 self.clear_timer(DasRight);
@@ -168,7 +195,7 @@ impl Game {
             }
             Input(PressRight) => {
                 if self.state == Running && self.try_move((1, 0)) {
-                    player.play("move").ok();
+                    sound.play(sound::Action::Move).ok();
                 }
                 self.started_right = Some(time);
                 self.clear_timer(DasLeft);
@@ -202,34 +229,47 @@ impl Game {
             Input(Hold) => {
                 if self.can_hold {
                     if !self.hold() {
-                        player.play("lose").ok();
+                        sound.play(sound::Meta::Lose).ok();
                         self.state = Done;
                         self.end_time = Some(self.time);
                         self.timers.clear();
                     } else {
-                        player.play("hold").ok();
+                        sound.play(sound::Action::Hold).ok();
                         // self.can_hold = false;
                     }
                 } else {
-                    // TODO: add failed hold sound
-                    player.play("nohold").ok();
+                    sound.play(sound::Action::NoHold).ok();
                 }
             }
             Input(Undo) => {
-                let Some(prev) = self.history.pop() else {
+                if !self.mode.allows_undo() {
+                    return false;
+                }
+                let Some(prev) = self.history.pop_back() else {
                     return false;
                 };
                 self.board = prev.board;
-                self.current = prev.current;
-                self.current.pos = (4, 20);
-                self.current.rot = Rotation::North;
+                debug_assert!(
+                    self.spawn(prev.current.piece),
+                    "shouldn't be invalid since that piece was able to be placed"
+                );
                 self.hold = prev.hold;
                 self.upcomming = prev.upcomming;
-                self.spins = prev.spins;
             }
             Input(Hard) | Timer(Lock | Extended | Timeout) => {
-                self.hard_drop(player);
-                return true;
+                let moment = Moment {
+                    board: self.board,
+                    current: self.current,
+                    hold: self.hold,
+                    upcomming: self.upcomming.clone(),
+                    spins: self.spins.clone(),
+                };
+                // at 536 bytes per Moment, we store 200 moves (107.2kB) max
+                if self.history.len() > 200 {
+                    self.history.pop_front();
+                }
+                self.history.push_back(moment);
+                self.hard_drop(sound)
             }
             Timer(t @ (SoftDrop | Gravity)) => {
                 if self.state == Running {
@@ -245,7 +285,7 @@ impl Game {
             }
             Input(rot @ (Cw | Ccw | Flip)) => {
                 if self.try_rotate(rot.try_into().expect("should always be a rotation")) {
-                    player.play("rotate").ok();
+                    sound.play(sound::Action::Rotate).ok();
                 }
                 // confirmed: jstris resets it even if you don't successfully rotate
                 self.clear_timer(Lock);
@@ -262,11 +302,6 @@ impl Game {
                 self.set_timer(Gravity);
             }
             Input(Restart | Quit) => unreachable!("should be handled in outer event loop"),
-            // Input(Undo | Redo) => {
-            //     // this might make using instants impossible... if you undo you'd want to
-            //     // also roll back the current time
-            //     unreachable!("should be handled in outer event loop")
-            // }
 
             // TODO: add das sound effect
             Input(ShowSolution(ind)) => match ind {
@@ -306,6 +341,24 @@ impl Game {
         false
     }
 
+    pub fn ghost_pos(&self) -> PieceLocation {
+        let current_pos = self.current.blocks();
+        let mut ghost = current_pos;
+        let mut y = self.current.pos.1;
+        loop {
+            let next = ghost.map(|(x, y)| (x, y - 1));
+            if !self.check_valid(next) {
+                break;
+            }
+            y -= 1;
+            ghost = next;
+        }
+        let pos = (self.current.pos.0, y);
+        let rot = self.current.rot;
+        let piece = self.current.piece;
+        PieceLocation { piece, pos, rot }
+    }
+
     fn set_timer(&mut self, t: TimerEvent) {
         use TimerEvent::*;
         let c = self.config;
@@ -337,7 +390,7 @@ impl Game {
         self.timers.retain(|&(_, ev)| ev != t)
     }
 
-    fn hard_drop(&mut self, player: &impl Sound) {
+    fn hard_drop(&mut self, sound: &SoundPlayer<impl Sink>) {
         while self.try_drop() {}
         let old_lines = self.lines;
         let moment = Moment {
@@ -347,20 +400,21 @@ impl Game {
             upcomming: self.upcomming.clone(),
             spins: self.spins.clone(),
         };
-        self.history.push(moment);
+        self.history.push_back(moment);
         // TODO: redo with "piece placement result struct"
         if self.lock() {
             if self.lines == old_lines {
-                player.play("lock").ok();
-            } else if self.lines < self.target_lines.unwrap_or(u16::MAX) {
-                player.play("line").ok();
+                sound.play(sound::Action::Lock).ok();
+            } else if !self.mode.is_complete(self.lines) {
+                // TODO: only output this sound when pressing harddrop
+                sound.play(sound::Action::HardDrop).ok();
             } else {
                 // TODO: maybe just play both at the same time?
-                player.play("win").or_else(|_| player.play("lock")).ok();
+                sound.play(sound::Meta::Win).or_else(|_| sound.play(sound::Clear::Single)).ok();
                 self.finish();
             }
         } else {
-            player.play("lose").ok();
+            sound.play(sound::Meta::Lose).ok();
             self.finish();
         }
     }
@@ -406,7 +460,7 @@ impl Game {
     }
 
     fn pop_piece(&mut self) -> Piece {
-        let next = self.upcomming.pop_front().unwrap();
+        let next = self.upcomming.dequeue().unwrap();
         if self.upcomming.len() < 7 {
             self.fill_bag();
         }
@@ -421,6 +475,7 @@ impl Game {
         }
     }
 
+    // TODO: return bool for whether it moved to trigger sound
     fn handle_das(&mut self) {
         let t = self.time;
         let threshold = FRAME * self.config.das as u32;
@@ -456,11 +511,7 @@ impl Game {
         }
         self.current = next;
         self.try_drop();
-        self.set_timer(if self.soft_dropping {
-            TimerEvent::SoftDrop
-        } else {
-            TimerEvent::Gravity
-        });
+        self.set_timer(if self.soft_dropping { TimerEvent::SoftDrop } else { TimerEvent::Gravity });
         self.set_timer(TimerEvent::Timeout);
         true
     }

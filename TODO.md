@@ -11,6 +11,12 @@
 - block skins, try "[]" like in tgm
 - show lines remaining in sprint with background color
 
+### web
+
+- try trunkrs.dev for development
+- add lib.rs/fumen and allow pasting in boards
+  - maybe use mxmoss.me/sketris instead of fumens...
+
 ## practice
 
 - undo key

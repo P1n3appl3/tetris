@@ -1,9 +1,3 @@
-use log::error;
-use tetris::{Cell, Game, GameState, Piece, PieceLocation, Rotation};
-
-use anyhow::{anyhow, Result};
-use termios::*;
-
 use std::{
     io::{self, Read as _, StdoutLock, Write},
     os::unix::prelude::AsRawFd,
@@ -13,43 +7,18 @@ use std::{
         mpsc::RecvTimeoutError,
     },
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
+
+use anyhow::{anyhow, Result};
+use log::error;
+use ringbuffer::RingBuffer;
+use termios::*;
+use tetris::{Color, Game, GameState, Mode, Piece, PieceLocation, Rotation, BG_COLOR, LOST_COLOR};
+use web_time::Instant;
 
 macro_rules! csi {
     ($( $x:expr ),*) => { concat!("\x1b[", $( $x ),*) };
-}
-
-const BG_COLOR: (u8, u8, u8) = (20, 20, 20);
-// const DONE_COLOR: (u8, u8, u8) = (106, 106, 106);
-const LOST_COLOR: (u8, u8, u8) = (106, 106, 106); // TODO: differentiate from DONE
-
-trait Color {
-    fn color(self) -> (u8, u8, u8);
-}
-
-impl Color for Piece {
-    fn color(self) -> (u8, u8, u8) {
-        match self {
-            Piece::I => (15, 155, 215),
-            Piece::J => (33, 65, 198),
-            Piece::L => (227, 91, 2),
-            Piece::O => (227, 159, 2),
-            Piece::S => (89, 177, 1),
-            Piece::T => (175, 41, 138),
-            Piece::Z => (215, 15, 55),
-        }
-    }
-}
-
-impl Color for Cell {
-    fn color(self) -> (u8, u8, u8) {
-        match self {
-            Cell::Piece(piece) => piece.color(),
-            Cell::Garbage => LOST_COLOR,
-            Cell::Empty => (0, 0, 0),
-        }
-    }
 }
 
 fn set_color(o: &mut StdoutLock, (r, g, b): (u8, u8, u8)) -> Result<()> {
@@ -92,7 +61,7 @@ pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
         )?;
     }
     let text_color = (255, 255, 255);
-    if let Some(target) = game.target_lines {
+    if let Mode::Sprint { target_lines: target } = game.mode {
         set_color(o, BG_COLOR)?;
         draw_text(
             o,
@@ -131,11 +100,7 @@ fn draw_spins(o: &mut StdoutLock, game: &Game, (ox, oy): (i16, i16)) -> Result<(
         let last = suggestion.moves.len() - 1;
         log::info!("{}", last);
         for (id, (m, i)) in suggestion.moves.iter().enumerate() {
-            let b2b = if m.spun && i.lines_cleared > 0 {
-                " +1 b2b"
-            } else {
-                ""
-            };
+            let b2b = if m.spun && i.lines_cleared > 0 { " +1 b2b" } else { "" };
             let m = format!("{:?} x:{} y:{} {:?}{}", m.piece, m.x, m.y, m.rotation, b2b);
 
             draw_text(o, (ox - 30, oy + 5 + id as i16), text_color, &m)?;
@@ -175,14 +140,11 @@ fn draw_spins(o: &mut StdoutLock, game: &Game, (ox, oy): (i16, i16)) -> Result<(
         if game.history.is_empty() {
             return Ok(());
         }
-        let prev = game.history.last().unwrap();
+        let prev = game.history.back().unwrap();
         // render available solutions
         for (id, spin) in spins.iter().enumerate() {
-            let spin_move_position = spin
-                .moves
-                .iter()
-                .position(|m| m.0.spun && m.1.lines_cleared > 0)
-                .unwrap();
+            let spin_move_position =
+                spin.moves.iter().position(|m| m.0.spun && m.1.lines_cleared > 0).unwrap();
             let spin_move = spin.moves[spin_move_position];
             let spin_summary = format!(
                 "{}: {:?} spin in {} pieces clearing {} lines",
@@ -191,11 +153,7 @@ fn draw_spins(o: &mut StdoutLock, game: &Game, (ox, oy): (i16, i16)) -> Result<(
                 spin_move_position,
                 spin_move.1.lines_cleared,
             );
-            let prev_moves = prev
-                .spins
-                .iter()
-                .map(|node| &node.moves)
-                .collect::<Vec<_>>();
+            let prev_moves = prev.spins.iter().map(|node| &node.moves).collect::<Vec<_>>();
 
             let matches_previous_move = prev_moves
                 .iter()
@@ -255,14 +213,11 @@ fn draw_text(
 fn draw_board(o: &mut StdoutLock, g: &Game, origin: (i16, i16)) -> Result<()> {
     let (ox, oy) = origin;
     let current_pos = g.current.blocks();
-    let mut ghost = current_pos;
-    loop {
-        let next = ghost.map(|(x, y)| (x, y - 1));
-        if !g.check_valid(next) {
-            break;
-        }
-        ghost = next;
-    }
+    let ghost_piece = g.ghost_pos();
+    let ghost = ghost_piece.blocks();
+
+    set_color(o, BG_COLOR)?;
+    write!(o, csi!("2J"))?;
     move_cursor(o, (ox, oy))?;
     for y in 0..22i8 {
         move_cursor(o, (ox, oy + y as i16 + 1))?;
@@ -274,6 +229,8 @@ fn draw_board(o: &mut StdoutLock, g: &Game, origin: (i16, i16)) -> Result<()> {
             } else if current_pos.contains(&(x, y)) && g.state == GameState::Running {
                 color = g.current.piece.color()
             } else if g.config.ghost && ghost.contains(&(x, y)) && g.state == GameState::Running {
+                // let (r, g, b) = g.current.piece.color();
+                // color = piece.color()
                 let (r, g, b) = g.current.piece.color();
                 color = (r / 3, g / 3, b / 3);
             } else if y > 19 {
@@ -303,8 +260,8 @@ impl RawMode {
                 let mut input = io::stdin().lock();
                 let _ = input.read(&mut buf);
             }
-            // TODO: debug, this doesn't print until after the recv_timeout happens for some reason?
-            // info!("{buf:?}");
+            // TODO: debug, this doesn't print until after the recv_timeout happens for some
+            // reason? info!("{buf:?}");
             tx.send(buf.contains(&b'u'))?;
             Ok(())
         });
