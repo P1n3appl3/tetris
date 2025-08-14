@@ -15,7 +15,7 @@ pub type Board = [[Cell; 10]; 50]; // hope no one stacks higher than this 👀
 pub enum Mode {
     Sprint { target_lines: u16 },
     // Cheese { target_lines: u16 },
-    Practice {},
+    Practice,
 }
 
 impl Mode {
@@ -61,7 +61,7 @@ pub struct Game {
     pub can_hold: bool,
     pub state: GameState,
     pub rng: StdRng,
-    pub history: Vec<Moment>,
+    pub history: VecDeque<Moment>,
 }
 
 impl Game {
@@ -84,7 +84,7 @@ impl Game {
             soft_dropping: false,
             can_hold: true,
             state: GameState::Done,
-            history: vec![],
+            history: VecDeque::new(),
         }
     }
 
@@ -97,12 +97,14 @@ impl Game {
         self.rng = StdRng::seed_from_u64(seed);
         self.fill_bag();
         self.time = Instant::now();
-        while let Some(Piece::Z | Piece::S) = self.upcomming.front() {
-            self.pop_piece();
+        if matches!(self.mode, Mode::Sprint { .. }) {
+            while let Some(Piece::Z | Piece::S) = self.upcomming.front() {
+                self.pop_piece();
+            }
         }
         sound.play(sound::Meta::Go).ok();
         // TODO: combine "ready" and "go" sounds
-        // TODO: make startup time configurable
+        // TODO: make startup time configurable or maybe even based on the sound length?
         self.timers.clear();
         self.set_timer(TimerEvent::Start);
     }
@@ -110,7 +112,7 @@ impl Game {
     pub fn handle(&mut self, event: Event, time: Instant, sound: &SoundPlayer<impl Sink>) {
         use {Event::*, GameState::*, InputEvent::*, TimerEvent::*};
         self.time = time;
-        debug!("handling input: {event:?}");
+        debug!("handling event: {event:?}");
         match event {
             Input(PressLeft) => {
                 if self.state == Running && self.try_move((-1, 0)) {
@@ -173,7 +175,7 @@ impl Game {
                 if !self.mode.allows_undo() {
                     return;
                 }
-                let Some(prev) = self.history.pop() else {
+                let Some(prev) = self.history.pop_back() else {
                     return;
                 };
                 self.board = prev.board;
@@ -191,7 +193,11 @@ impl Game {
                     hold: self.hold,
                     upcomming: self.upcomming.clone(),
                 };
-                self.history.push(moment);
+                // at 536 bytes per Moment, we store 200 moves (107.2kB) max
+                if self.history.len() > 200 {
+                    self.history.pop_front();
+                }
+                self.history.push_back(moment);
                 self.hard_drop(sound)
             }
             Timer(t @ (SoftDrop | Gravity)) => {
@@ -289,6 +295,7 @@ impl Game {
             if self.lines == old_lines {
                 sound.play(sound::Action::Lock).ok();
             } else if !self.mode.is_complete(self.lines) {
+                // TODO: only output this sound when pressing harddrop
                 sound.play(sound::Action::HardDrop).ok();
             } else {
                 // TODO: maybe just play both at the same time?
