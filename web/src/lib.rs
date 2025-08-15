@@ -4,7 +4,7 @@ mod graphics;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::mpsc::{self, Receiver, channel};
+use std::sync::mpsc::{self, channel, Receiver};
 
 use log::info;
 use tetris::sound::{NullSink, Sink, SoundPlayer};
@@ -37,7 +37,7 @@ pub async fn main() -> Result<(), JsValue> {
     let config = Config {
         das: 6,
         arr: 0,
-        gravity: 60,
+        gravity: Some(60),
         soft_drop: 2,
         lock_delay: (60, 300, 1200),
         ghost: true,

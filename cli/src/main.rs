@@ -137,7 +137,7 @@ fn run_game(
     let mut new_piece = false;
 
     let done = loop {
-        if new_piece {
+        if game.mode.search_enabled() && new_piece {
             // call search algorithm
             log::info!("upcoming: {:?}", game.upcomming);
             log::info!("hold: {:?}", game.hold);

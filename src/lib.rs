@@ -56,11 +56,11 @@ macro_rules! rotation_lut {
         lutify!(($e) for $v in [Rotation::North, Rotation::East, Rotation::South, Rotation::West])
     };
 }
+pub const LUT: [[[(i8, i8); 4]; 4]; 7] =
+    piece_lut!(piece => rotation_lut!(rotation => rotation.rotate_blocks(piece.blocks())));
 
 impl PieceLocation {
     pub const fn blocks(&self) -> [(i8, i8); 4] {
-        const LUT: [[[(i8, i8); 4]; 4]; 7] =
-            piece_lut!(piece => rotation_lut!(rotation => rotation.rotate_blocks(piece.blocks())));
         self.translate_blocks(LUT[self.piece as usize][self.rot as usize])
         // self.translate_blocks(self.rotation.rotate_blocks(self.piece.blocks()))
     }
@@ -93,7 +93,6 @@ pub enum Piece {
     T,
     Z,
 }
-
 impl Piece {
     pub const fn blocks(&self) -> [(i8, i8); 4] {
         match self {
@@ -152,6 +151,7 @@ pub enum Rotation {
 }
 
 impl Rotation {
+    // Piece::I => [(-1, 0), (0, 0), (1, 0), (2, 0)],
     pub const fn rotate_block(&self, (x, y): (i8, i8)) -> (i8, i8) {
         match self {
             Rotation::North => (x, y),
@@ -301,32 +301,88 @@ impl Rotation {
 }
 
 impl Piece {
-    // pub fn get_pos(self, r: Rotation, (x, y): (i8, i8)) -> Pos {
-    //     PIECE_DATA[self as usize][r as usize].map(|(a, b)| (x + a, y - b))
-    // }
-
-    fn get_your_kicks(self, rot: Rotation, dir: Spin) -> [(i8, i8); 5] {
+    const fn get_your_kicks(self, rot: Rotation, dir: Spin) -> [(i8, i8); 6] {
         let next_rot = rot.rotate(dir);
-        use {Piece::*, Rotation::*};
-        let idx = match (rot, next_rot) {
-            (North, East) => 0,
-            (East, North) => 1,
-            (East, South) => 2,
-            (South, East) => 3,
-            (South, West) => 4,
-            (West, South) => 5,
-            (West, North) => 6,
-            (North, West) => 7,
-            (North, South) => 8,
-            (South, North) => 9,
-            (East, West) => 10,
-            (West, East) => 11,
-            (a, b) => unreachable!("invalid rotation: {a:?} -> {b:?}"),
-        };
         match self {
-            I => ROTI[idx],
-            O => Default::default(),
-            _ => ROTJLSTZ[idx],
+            Piece::O => [(0, 0); 6], // just be careful not to rotate the O piece at all lol
+            Piece::I => match (rot, next_rot) {
+                (Rotation::East, Rotation::North) => {
+                    [(-1, 0), (-2, 0), (1, 0), (-2, -2), (1, 1), (-1, 0)]
+                }
+                (Rotation::East, Rotation::South) => {
+                    [(0, -1), (-1, -1), (2, -1), (-1, 1), (2, -2), (0, -1)]
+                }
+                (Rotation::East, Rotation::West) => {
+                    [(-1, -1), (0, -1), (-1, -1), (-1, -1), (-1, -1), (-1, -1)]
+                }
+                (Rotation::South, Rotation::North) => {
+                    [(-1, 1), (-1, 0), (-1, 1), (-1, 1), (-1, 1), (-1, 1)]
+                }
+                (Rotation::South, Rotation::East) => {
+                    [(0, 1), (-2, 1), (1, 1), (-2, 2), (1, -1), (0, 1)]
+                }
+                (Rotation::South, Rotation::West) => {
+                    [(-1, 0), (1, 0), (-2, 0), (1, 1), (-2, -2), (-1, 0)]
+                }
+                (Rotation::West, Rotation::North) => {
+                    [(0, 1), (1, 1), (-2, 1), (1, -1), (-2, 2), (0, 1)]
+                }
+                (Rotation::West, Rotation::East) => {
+                    [(1, 1), (0, 1), (1, 1), (1, 1), (1, 1), (1, 1)]
+                }
+                (Rotation::West, Rotation::South) => {
+                    [(1, 0), (2, 0), (-1, 0), (2, 2), (-1, -1), (1, 0)]
+                }
+                (Rotation::North, Rotation::East) => {
+                    [(1, 0), (2, 0), (-1, 0), (-1, -1), (2, 2), (1, 0)]
+                }
+                (Rotation::North, Rotation::West) => {
+                    [(0, -1), (-1, -1), (2, -1), (2, -2), (-1, 1), (0, -1)]
+                }
+                (Rotation::North, Rotation::South) => {
+                    [(1, -1), (1, 0), (1, -1), (1, -1), (1, -1), (1, -1)]
+                }
+                _ => panic!(), // this should never happen lol
+            },
+            _ => match (rot, next_rot) {
+                (Rotation::East, Rotation::North) => {
+                    [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2), (0, 0)]
+                }
+                (Rotation::East, Rotation::South) => {
+                    [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2), (0, 0)]
+                }
+                (Rotation::East, Rotation::West) => {
+                    [(0, 0), (1, 0), (1, 2), (1, 1), (0, 2), (0, 1)]
+                }
+                (Rotation::South, Rotation::North) => {
+                    [(0, 0), (0, -1), (-1, -1), (1, -1), (-1, 0), (1, 0)]
+                }
+                (Rotation::South, Rotation::East) => {
+                    [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2), (0, 0)]
+                }
+                (Rotation::South, Rotation::West) => {
+                    [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2), (0, 0)]
+                }
+                (Rotation::West, Rotation::North) => {
+                    [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2), (0, 0)]
+                }
+                (Rotation::West, Rotation::East) => {
+                    [(0, 0), (-1, 0), (-1, 2), (-1, 1), (0, 2), (0, 1)]
+                }
+                (Rotation::West, Rotation::South) => {
+                    [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2), (0, 0)]
+                }
+                (Rotation::North, Rotation::East) => {
+                    [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2), (0, 0)]
+                }
+                (Rotation::North, Rotation::West) => {
+                    [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2), (0, 0)]
+                }
+                (Rotation::North, Rotation::South) => {
+                    [(0, 0), (0, 1), (1, 1), (-1, 1), (1, 0), (-1, 0)]
+                }
+                _ => panic!(), // this should never happen lol
+            },
         }
     }
 }
@@ -375,37 +431,3 @@ impl TryFrom<InputEvent> for Spin {
         })
     }
 }
-
-// SRS kicks from: https://harddrop.com/wiki/SRS#How_guideline_SRS_actually_works
-// 180 kicks from: https://tetrio.wiki.gg/images/5/52/TETR.IO_180kicks.png?6d5d9d
-const ROTJLSTZ: [[(i8, i8); 5]; 12] = [
-    [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)], // n -> e
-    [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],     // e -> n
-    [(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)],     // e -> s
-    [(0, 0), (-1, 0), (-1, 1), (0, -2), (-1, -2)], // s -> e
-    [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],    // s -> w
-    [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],  // w -> s
-    [(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)],  // w -> n
-    [(0, 0), (1, 0), (1, 1), (0, -2), (1, -2)],    // n -> w
-    [(0, 0), (0, 1), (0, 0), (0, 0), (0, 0)],      // n -> s
-    [(0, 0), (0, -1), (0, 0), (0, 0), (0, 0)],     // s -> n
-    [(0, 0), (1, 0), (0, 0), (0, 0), (0, 0)],      // e -> w
-    [(0, 0), (-1, 0), (0, 0), (0, 0), (0, 0)],     // w -> e
-];
-
-// I spins are slightly asymetrical, see https://harddrop.com/wiki/I-spins_in_SRS
-// (yum)
-const ROTI: [[(i8, i8); 5]; 12] = [
-    [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)], // n -> e
-    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)], // e -> n
-    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)], // e -> s
-    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)], // s -> e
-    [(0, 0), (2, 0), (-1, 0), (2, 1), (-1, -2)], // s -> w
-    [(0, 0), (-2, 0), (1, 0), (-2, -1), (1, 2)], // w -> s
-    [(0, 0), (1, 0), (-2, 0), (1, -2), (-2, 1)], // w -> n
-    [(0, 0), (-1, 0), (2, 0), (-1, 2), (2, -1)], // n -> w
-    [(0, 0), (0, 1), (0, 0), (0, 0), (0, 0)],    // n -> s
-    [(0, 0), (0, -1), (0, 0), (0, 0), (0, 0)],   // s -> n
-    [(0, 0), (1, 0), (0, 0), (0, 0), (0, 0)],    // e -> w
-    [(0, 0), (-1, 0), (0, 0), (0, 0), (0, 0)],   // w -> e
-];

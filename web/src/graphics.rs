@@ -1,12 +1,12 @@
-use image::{ImageFormat, imageops::FilterType};
+use image::{imageops::FilterType, ImageFormat};
 use ringbuffer::RingBuffer;
-use tetris::{Cell, Game, GameState, Piece, Rotation};
+use tetris::{Cell, Game, GameState, Piece, PieceLocation, Rotation};
 use ultraviolet::DVec3;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    Blob, CanvasRenderingContext2d, HtmlCanvasElement, ImageBitmap, ImageData, Response,
     js_sys::{Uint8Array, Uint8ClampedArray},
+    Blob, CanvasRenderingContext2d, HtmlCanvasElement, ImageBitmap, ImageData, Response,
 };
 
 const SIZE: usize = 24;
@@ -59,12 +59,12 @@ pub fn draw_board(
         return Ok(());
     }
 
-    let (piece, (x, y), rot) = game.current;
+    let PieceLocation { piece, pos: (x, y), rot } = game.current;
     cx.set_global_alpha(0.25); // TODO: slider
     let ghost = game.ghost_pos();
     let origin = (
-        (ghost.0 as f64 * SIZE as f64 + border_width),
-        ((19 - ghost.1) as f64 * SIZE as f64 + border_width),
+        (ghost.pos.0 as f64 * SIZE as f64 + border_width),
+        ((19 - ghost.pos.1) as f64 * SIZE as f64 + border_width),
     );
     draw_piece(canvas, skin, piece, rot, origin)?;
     cx.set_global_alpha(1.0);
@@ -90,7 +90,8 @@ fn draw_piece(
     origin: (f64, f64),
 ) -> Result<(), JsValue> {
     let cx = canvas.get_context("2d")?.unwrap().dyn_into::<CanvasRenderingContext2d>()?;
-    for (x, y) in piece.get_pos(rot, (0, 0)) {
+    let loc = PieceLocation { piece, rot, pos: (0, 0) };
+    for (x, y) in loc.blocks() {
         let sprite = skindex(Cell::Piece(piece)).map(|i| &skin[i]).unwrap();
         cx.draw_image_with_image_bitmap(
             sprite,

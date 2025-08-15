@@ -33,6 +33,13 @@ impl Mode {
             Mode::Practice {} => true,
         }
     }
+
+    pub fn search_enabled(&self) -> bool {
+        match self {
+            Mode::Sprint { .. } => false,
+            Mode::Practice => true,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -269,7 +276,8 @@ impl Game {
                     self.history.pop_front();
                 }
                 self.history.push_back(moment);
-                self.hard_drop(sound)
+                self.hard_drop(sound);
+                return true;
             }
             Timer(t @ (SoftDrop | Gravity)) => {
                 if self.state == Running {
@@ -532,7 +540,8 @@ impl Game {
         let new_rot = rot.rotate(dir);
         let new_current = PieceLocation::new(piece, pos, new_rot);
         let new_pos = new_current.blocks();
-        for (dx, dy) in piece.get_your_kicks(rot, dir) {
+        let kicks = piece.get_your_kicks(rot, dir);
+        for (dx, dy) in kicks {
             let displaced = new_pos.map(|(x, y)| (x + dx, y + dy));
             if self.check_valid(displaced) {
                 self.current =
@@ -548,6 +557,10 @@ impl Game {
                 }
                 return true;
             }
+        }
+        if piece == Piece::I {
+            log::info!("pos: {pos:?}");
+            log::info!("kicks: {kicks:?}");
         }
         false
     }
