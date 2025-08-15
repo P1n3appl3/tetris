@@ -46,13 +46,10 @@ pub async fn main() -> Result<(), JsValue> {
     let (mut raf_loop, _canceler) = wasm_repeated_animation_frame::RafLoop::new();
     let mut fps = fps::FPSCounter::new();
     let mut game = Game::new(config);
-    game.start_time = Some(Instant::now());
-    game.mode = tetris::Mode::Practice;
+    game.mode = tetris::Mode::Sprint { target_lines: 10 };
     info!("starting event loop");
-    // TODO: timers
     let sound = SoundPlayer::<NullSink>::default();
-    game.start(0xabad1d3a, &sound);
-    game.state = GameState::Running;
+    game.start(None, &sound);
 
     // TODO: eventually we wanna go back to separate event loops for inputs/drawing/timers,
     // but for now this makes it easy to share game state between those
@@ -95,7 +92,11 @@ fn run_loop(
     let now = Instant::now();
     fps.set_text_content(Some(&format!("fps: {}", fps_counter.tick(now))));
 
-    let t = (now - game.start_time.unwrap()).as_secs_f64();
+    let t = if let Some(start_time) = game.start_time {
+        game.end_time.unwrap_or(now).duration_since(start_time).as_secs_f64()
+    } else {
+        0.0
+    };
     timer.set_text_content(Some(&format!("{t:.2}")));
 
     if let tetris::Mode::Sprint { target_lines: target } = game.mode {
@@ -103,23 +104,30 @@ fn run_loop(
     }
 
     while let Ok(e) = rx.try_recv() {
-        use tetris::{Event::*, InputEvent::*};
+        use tetris::{Event::*, GameState::*, InputEvent::*};
         if let Input(Restart) = e {
-            game.start((t * 1000.0) as u64, sound);
+            game.start(None, sound);
             break;
         }
-        game.handle(e, now, sound);
-    }
-    if game.state != GameState::Done {
-        while let Some(&(t, timer_event)) = game.timers.front() {
-            if t < now {
-                game.timers.pop_front();
-                game.handle(Event::Timer(timer_event), now, sound);
-            } else {
-                break;
-            }
+        if game.state == Running
+            || game.state == Startup
+                && matches!(e, Input(PressLeft | PressRight | ReleaseLeft | ReleaseRight))
+        {
+            game.handle(e, now, sound);
         }
     }
+    if game.state == GameState::Done {
+        game.timers.clear();
+    }
+    while let Some(&(t, timer_event)) = game.timers.front() {
+        if t < now {
+            game.timers.pop_front();
+            game.handle(Event::Timer(timer_event), now, sound);
+        } else {
+            break;
+        }
+    }
+
     graphics::draw_board(game, board, skin, t).unwrap();
     // could do these only when needed instead of every frame if we wanted
     graphics::draw_queue(game, queue, skin, 5).unwrap();
@@ -141,7 +149,6 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
         ("s", Flip),
         ("a", Hold),
         ("r", Restart),
-        ("q", Quit),
         ("u", Undo),
     ]
     .into_iter()
