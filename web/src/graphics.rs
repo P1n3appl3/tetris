@@ -39,6 +39,9 @@ pub fn draw_board(
 ) -> Result<(), JsValue> {
     let cx = canvas.get_context("2d")?.unwrap().dyn_into::<CanvasRenderingContext2d>()?;
     cx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
+    if !game.should_draw_board() {
+        return Ok(());
+    }
     let border_width = 1.0;
     for y in 0..20 {
         for x in 0..10 {
@@ -107,6 +110,9 @@ pub fn draw_hold(game: &Game, canvas: &HtmlCanvasElement, skin: &Skin) -> Result
     // cx.set_fill_style_str("rgb(17, 17, 17)");
     // cx.fill_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
     cx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
+    if !game.should_draw_hold() {
+        return Ok(());
+    }
     if let Some(piece) = game.hold {
         draw_piece(canvas, skin, piece, Rotation::North, (0.0, 0.0))?;
     }
@@ -123,6 +129,9 @@ pub fn draw_queue(
     // cx.set_fill_style_str("rgb(17, 17, 17)");
     // cx.fill_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
     cx.clear_rect(0.0, 0.0, canvas.width() as f64, canvas.height() as f64);
+    if !game.should_draw_queue() {
+        return Ok(());
+    }
     for (i, &piece) in game.upcomming.iter().take(depth).enumerate() {
         draw_piece(canvas, skin, piece, Rotation::North, (0.0, (3 * i * SIZE) as f64))?;
     }

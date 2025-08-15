@@ -78,7 +78,7 @@ fn main() {
     let input = EventLoop::start(keys);
     let mut game = Game::new(config);
     game.mode = if args.practice {
-        Mode::Practice {}
+        Mode::TrainingLab { lookahead: None }
     } else {
         Mode::Sprint { target_lines: args.lines.map(u16::from).unwrap_or(40) }
     };

@@ -1,4 +1,4 @@
-mod game;
+pub mod game;
 pub mod replay;
 pub mod sound;
 #[cfg(test)]
@@ -215,6 +215,7 @@ pub enum TimerEvent {
     Timeout,
     Start,
     Are,
+    Lookahead,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]

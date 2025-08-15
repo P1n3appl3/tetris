@@ -13,10 +13,37 @@ use crate::{
 pub type Board = [[Cell; 10]; 50]; // hope no one stacks higher than this 👀
 
 #[derive(Clone)]
+pub struct Lookahead {
+    /// number of placements before board will render again
+    pub min_placements: usize,
+    /// Amount of time user has to stop making inputs after min_placements has been reached for
+    /// board to render
+    ///
+    /// unit: frames
+    pub timeout: u16,
+    board_visible: bool,
+    next_piece_goal: usize,
+    // state
+    // /// count of pieces per burst, for proper undo support
+    // bursts: VecDeque<u8>,
+}
+
+impl Lookahead {
+    pub fn new(min_placements: usize, timeout: u16) -> Self {
+        Self { min_placements, timeout, board_visible: true, next_piece_goal: 0 }
+    }
+}
+
+#[derive(Clone)]
 pub enum Mode {
-    Sprint { target_lines: u16 },
+    Sprint {
+        target_lines: u16,
+    },
     // Cheese { target_lines: u16 },
-    Practice,
+    TrainingLab {
+        lookahead: Option<Lookahead>,
+        // search config
+    },
 }
 
 impl Mode {
@@ -30,14 +57,21 @@ impl Mode {
     fn allows_undo(&self) -> bool {
         match self {
             Mode::Sprint { .. } => false,
-            Mode::Practice => true,
+            Mode::TrainingLab { .. } => true,
         }
     }
 
     pub fn search_enabled(&self) -> bool {
         match self {
             Mode::Sprint { .. } => false,
-            Mode::Practice => true,
+            Mode::TrainingLab { .. } => true,
+        }
+    }
+
+    fn lookahead_timeout(&self) -> u16 {
+        match self {
+            Mode::TrainingLab { lookahead: Some(lookahead) } => lookahead.timeout,
+            _ => unreachable!(),
         }
     }
 }
@@ -58,6 +92,7 @@ pub struct Game {
     pub current: PieceLocation,
     pub hold: Option<Piece>,
     pub lines: u16,
+    pub pieces: usize,
     pub mode: Mode,
     pub config: Config,
     pub timers: VecDeque<(Instant, TimerEvent)>,
@@ -124,6 +159,27 @@ impl Game {
         spins.sort_by_key(|s| s.moves.iter().take_while(|m| m.1.lines_cleared == 0).count());
         spins
     }
+
+    pub fn should_draw_board(&self) -> bool {
+        match &self.mode {
+            Mode::TrainingLab { lookahead: Some(lookahead) } => lookahead.board_visible,
+            _ => true,
+        }
+    }
+
+    pub fn should_draw_hold(&self) -> bool {
+        match &self.mode {
+            Mode::TrainingLab { lookahead: Some(lookahead) } => lookahead.board_visible,
+            _ => true,
+        }
+    }
+
+    pub fn should_draw_queue(&self) -> bool {
+        match &self.mode {
+            Mode::TrainingLab { lookahead: Some(lookahead) } => lookahead.board_visible,
+            _ => true,
+        }
+    }
 }
 
 impl Game {
@@ -136,6 +192,7 @@ impl Game {
             current: PieceLocation::new(Piece::I, (3, 21), Rotation::North),
             hold: None,
             lines: 0,
+            pieces: 0,
             mode: Mode::Sprint { target_lines: 40 },
             timers: Default::default(),
             started_right: None,
@@ -158,6 +215,7 @@ impl Game {
         self.board = [[Cell::Empty; 10]; 50];
         self.hold = None;
         self.lines = 0;
+        self.pieces = 0;
         self.upcomming.clear();
         self.rng = StdRng::seed_from_u64(seed.unwrap_or_else(|| {
             SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64
@@ -181,6 +239,18 @@ impl Game {
         use {Event::*, GameState::*, InputEvent::*, TimerEvent::*};
         self.time = time;
         debug!("handling event: {event:?}");
+        match event {
+            Input(_) => match &mut self.mode {
+                Mode::TrainingLab { lookahead: Some(lookahead) } => {
+                    if !lookahead.board_visible && self.pieces >= lookahead.next_piece_goal {
+                        self.clear_timer(Lookahead);
+                        self.set_timer(Lookahead);
+                    }
+                }
+                _ => {}
+            },
+            _ => {}
+        }
         match event {
             Input(PressLeft) => {
                 if self.state == Running && self.try_move((-1, 0)) {
@@ -336,6 +406,13 @@ impl Game {
             Timer(Are) => {
                 todo!()
             }
+            Timer(Lookahead) => match &mut self.mode {
+                Mode::TrainingLab { lookahead: Some(lookahead) } => {
+                    lookahead.board_visible = true;
+                    lookahead.next_piece_goal = self.pieces + lookahead.min_placements;
+                }
+                _ => {}
+            },
         };
         // TODO: set lock timers if on the ground and they arent already set
         false
@@ -380,6 +457,7 @@ impl Game {
             }
             Start => 120,
             Are => todo!(),
+            Lookahead => self.mode.lookahead_timeout(),
         };
         let time = self.time + FRAME * frames as u32;
         let idx = self.timers.partition_point(|&(i, _)| i < time);
@@ -463,6 +541,7 @@ impl Game {
             }
         }
         let next = self.pop_piece();
+        self.pieces += 1;
         self.spawn(next)
     }
 

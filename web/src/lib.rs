@@ -5,8 +5,10 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::mpsc::{self, channel, Receiver};
+use std::time::Duration;
 
 use log::info;
+use tetris::game::Lookahead;
 use tetris::sound::{NullSink, Sink, SoundPlayer};
 use tetris::{Config, Event, Game, GameState, InputEvent};
 use wasm_bindgen::prelude::*;
@@ -46,7 +48,8 @@ pub async fn main() -> Result<(), JsValue> {
     let (mut raf_loop, _canceler) = wasm_repeated_animation_frame::RafLoop::new();
     let mut fps = fps::FPSCounter::new();
     let mut game = Game::new(config);
-    game.mode = tetris::Mode::Sprint { target_lines: 10 };
+    // game.mode = tetris::Mode::Sprint { target_lines: 10 };
+    game.mode = tetris::Mode::TrainingLab { lookahead: Some(Lookahead::new(3, 30)) };
     info!("starting event loop");
     let sound = SoundPlayer::<NullSink>::default();
     game.start(None, &sound);
