@@ -5,7 +5,6 @@ use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use tetrizz::beam_search::Node;
 use web_time::{Instant, SystemTime};
 
-
 use crate::{
     sound::{Action, Clear, Meta, Sink, Sound, SoundPlayer},
     *,
@@ -31,7 +30,7 @@ impl Mode {
     fn allows_undo(&self) -> bool {
         match self {
             Mode::Sprint { .. } => false,
-            Mode::Practice {} => true,
+            Mode::Practice => true,
         }
     }
 
@@ -103,16 +102,8 @@ impl Game {
     }
 
     pub fn spin_shortlist(nodes: &[Node]) -> Vec<Node> {
-        let mut bounties = vec![
-            // kicks are broken for I at the moment
-            // Piece::I,
-            Piece::J,
-            Piece::L,
-            Piece::T,
-            Piece::Z,
-            Piece::S,
-            Piece::T,
-        ];
+        let mut bounties =
+            vec![Piece::I, Piece::J, Piece::L, Piece::T, Piece::Z, Piece::S, Piece::T];
         let mut spins = vec![];
         'find_bounties: for node in nodes.iter() {
             for (m, placement_info) in node.moves.iter() {
@@ -120,12 +111,6 @@ impl Game {
                     let piece = m.piece.into();
                     let bounty = bounties.iter().position(|&b| b == piece);
                     if let Some(bounty) = bounty {
-                        // spins.push((
-                        //     placement_info.lines_cleared,
-                        //     m.piece,
-                        //     placement_info.lines_cleared,
-                        //     ind + 1,
-                        // ));
                         spins.push(node.clone());
                         bounties.remove(bounty);
                         if bounties.is_empty() {
@@ -409,9 +394,9 @@ impl Game {
         while self.try_drop() {}
         let old_lines = self.lines;
         let moment = Moment {
-            board: self.board.clone(),
-            current: self.current.clone(),
-            hold: self.hold.clone(),
+            board: self.board,
+            current: self.current,
+            hold: self.hold,
             upcomming: self.upcomming.clone(),
             spins: self.spins.clone(),
         };
@@ -466,7 +451,7 @@ impl Game {
     pub fn lock(&mut self) -> bool {
         log::info!("pos: {:?}", self.current.pos);
         for (x, y) in self.current.blocks() {
-            log::info!("{} {}", x, y);
+            log::info!("{x} {y}");
             self.board[y as usize][x as usize] = Cell::Piece(self.current.piece);
         }
         for i in (0..23).rev() {
@@ -592,7 +577,7 @@ impl Game {
     }
 
     fn try_move(&mut self, (dx, dy): (i8, i8)) -> bool {
-        let mut next_current = self.current.clone();
+        let mut next_current = self.current;
         next_current.pos.0 += dx;
         next_current.pos.1 += dy;
 

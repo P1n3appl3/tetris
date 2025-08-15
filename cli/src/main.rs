@@ -143,27 +143,18 @@ fn run_game(
             log::info!("hold: {:?}", game.hold);
             log::info!("current: {:?}", game.current);
             let (tetrizz_game, queue) = game.as_tetrizz_game_and_queue();
-            log::info!("queue: {:?}", queue);
+            log::info!("queue: {queue:?}");
             log::info!("hold: {:?}", tetrizz_game.hold);
             let search_loc = tetrizz::movegen::movegen(&tetrizz_game, queue[0]);
             let heap = tetrizz::beam_search::search_results(
                 &tetrizz_game,
                 &search_loc,
                 queue,
-                &eval,
+                eval,
                 7,
                 3000,
             );
             let mut spins = vec![];
-            // let mut bounties = vec![
-            //     Piece::I,
-            //     Piece::J,
-            //     Piece::L,
-            //     Piece::T,
-            //     Piece::Z,
-            //     Piece::S,
-            //     Piece::T,
-            // ];
             for node in heap.iter() {
                 for (m, placement_info) in node.moves.iter() {
                     if placement_info.lines_cleared > 0 {

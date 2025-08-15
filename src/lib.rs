@@ -62,7 +62,6 @@ pub const LUT: [[[(i8, i8); 4]; 4]; 7] =
 impl PieceLocation {
     pub const fn blocks(&self) -> [(i8, i8); 4] {
         self.translate_blocks(LUT[self.piece as usize][self.rot as usize])
-        // self.translate_blocks(self.rotation.rotate_blocks(self.piece.blocks()))
     }
 
     const fn translate(&self, (x, y): (i8, i8)) -> (i8, i8) {
@@ -151,7 +150,6 @@ pub enum Rotation {
 }
 
 impl Rotation {
-    // Piece::I => [(-1, 0), (0, 0), (1, 0), (2, 0)],
     pub const fn rotate_block(&self, (x, y): (i8, i8)) -> (i8, i8) {
         match self {
             Rotation::North => (x, y),
@@ -299,7 +297,10 @@ impl Rotation {
         }
     }
 }
-
+// SRS kicks from: https://harddrop.com/wiki/SRS#How_guideline_SRS_actually_works
+// 180 kicks from: https://tetrio.wiki.gg/images/5/52/TETR.IO_180kicks.png?6d5d9d
+// I spins are slightly asymetrical, see https://harddrop.com/wiki/I-spins_in_SRS
+// (yum)
 impl Piece {
     const fn get_your_kicks(self, rot: Rotation, dir: Spin) -> [(i8, i8); 6] {
         let next_rot = rot.rotate(dir);
@@ -342,7 +343,7 @@ impl Piece {
                 (Rotation::North, Rotation::South) => {
                     [(1, -1), (1, 0), (1, -1), (1, -1), (1, -1), (1, -1)]
                 }
-                _ => panic!(), // this should never happen lol
+                _ => unreachable!(),
             },
             _ => match (rot, next_rot) {
                 (Rotation::East, Rotation::North) => {
@@ -381,7 +382,7 @@ impl Piece {
                 (Rotation::North, Rotation::South) => {
                     [(0, 0), (0, 1), (1, 1), (-1, 1), (1, 0), (-1, 0)]
                 }
-                _ => panic!(), // this should never happen lol
+                _ => unreachable!(),
             },
         }
     }

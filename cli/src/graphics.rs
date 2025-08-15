@@ -98,7 +98,7 @@ fn draw_spins(o: &mut StdoutLock, game: &Game, (ox, oy): (i16, i16)) -> Result<(
         // render selected solution
         let mut game = solution.clone();
         let last = suggestion.moves.len() - 1;
-        log::info!("{}", last);
+        log::info!("{last}");
         for (id, (m, i)) in suggestion.moves.iter().enumerate() {
             let b2b = if m.spun && i.lines_cleared > 0 { " +1 b2b" } else { "" };
             let m = format!("{:?} x:{} y:{} {:?}{}", m.piece, m.x, m.y, m.rotation, b2b);
@@ -155,18 +155,13 @@ fn draw_spins(o: &mut StdoutLock, game: &Game, (ox, oy): (i16, i16)) -> Result<(
             );
             let prev_moves = prev.spins.iter().map(|node| &node.moves).collect::<Vec<_>>();
 
-            let matches_previous_move = prev_moves
-                .iter()
-                .find(|&&prev_moveset| {
-                    let prev_spin_move_position = prev_moveset
-                        .iter()
-                        .position(|m| m.0.spun && m.1.lines_cleared > 0)
-                        .unwrap();
-                    let prev_spin_move = prev_moveset[prev_spin_move_position];
-                    prev_spin_move.0.piece == spin_move.0.piece
-                        && prev_spin_move_position > spin_move_position
-                })
-                .is_some();
+            let matches_previous_move = prev_moves.iter().any(|&prev_moveset| {
+                let prev_spin_move_position =
+                    prev_moveset.iter().position(|m| m.0.spun && m.1.lines_cleared > 0).unwrap();
+                let prev_spin_move = prev_moveset[prev_spin_move_position];
+                prev_spin_move.0.piece == spin_move.0.piece
+                    && prev_spin_move_position > spin_move_position
+            });
             let solution_color = if matches_previous_move {
                 (0x03, 0xc0, 0x4a) // parakeet
             } else {
@@ -229,8 +224,6 @@ fn draw_board(o: &mut StdoutLock, g: &Game, origin: (i16, i16)) -> Result<()> {
             } else if current_pos.contains(&(x, y)) && g.state == GameState::Running {
                 color = g.current.piece.color()
             } else if g.config.ghost && ghost.contains(&(x, y)) && g.state == GameState::Running {
-                // let (r, g, b) = g.current.piece.color();
-                // color = piece.color()
                 let (r, g, b) = g.current.piece.color();
                 color = (r / 3, g / 3, b / 3);
             } else if y > 19 {
