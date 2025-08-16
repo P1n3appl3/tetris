@@ -12,7 +12,7 @@ use crate::{
 
 pub type Board = [[Cell; 10]; 50]; // hope no one stacks higher than this 👀
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Lookahead {
     /// number of placements before board will render again
     pub min_placements: usize,
@@ -34,7 +34,7 @@ impl Lookahead {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum Mode {
     Sprint {
         target_lines: u16,
@@ -236,7 +236,8 @@ impl Game {
         self.start_time = None;
         if matches!(self.mode, Mode::Sprint { .. }) {
             while let Some(Piece::Z | Piece::S) = self.upcomming.front() {
-                self.pop_piece();
+                self.upcomming.clear();
+                self.fill_bag();
             }
         }
         self.mode.start();

@@ -48,9 +48,10 @@ pub async fn main() -> Result<(), JsValue> {
     let (mut raf_loop, _canceler) = wasm_repeated_animation_frame::RafLoop::new();
     let mut fps = fps::FPSCounter::new();
     let mut game = Game::new(config);
-    // game.mode = tetris::Mode::Sprint { target_lines: 10 };
+    // game.mode = tetris::Mode::Sprint { target_lines: 40 };
     game.mode = tetris::Mode::TrainingLab { search: false, lookahead: Some(Lookahead::new(3, 30)) };
-    info!("starting event loop");
+    info!("starting event loop, why won't you work!?");
+    info!("mode: {:?}", game.mode);
     let sound = SoundPlayer::<NullSink>::default();
     game.start(None, &sound);
 

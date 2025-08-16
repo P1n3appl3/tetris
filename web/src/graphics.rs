@@ -114,7 +114,7 @@ pub fn draw_hold(game: &Game, canvas: &HtmlCanvasElement, skin: &Skin) -> Result
         return Ok(());
     }
     if let Some(piece) = game.hold {
-        draw_piece(canvas, skin, piece, Rotation::North, (0.0, 0.0))?;
+        draw_piece(canvas, skin, piece, Rotation::North, (SIZE as _, SIZE as _))?;
     }
     Ok(())
 }
@@ -133,7 +133,13 @@ pub fn draw_queue(
         return Ok(());
     }
     for (i, &piece) in game.upcomming.iter().take(depth).enumerate() {
-        draw_piece(canvas, skin, piece, Rotation::North, (0.0, (3 * i * SIZE) as f64))?;
+        draw_piece(
+            canvas,
+            skin,
+            piece,
+            Rotation::North,
+            (SIZE as f64, ((1 + 3 * i) * SIZE) as f64),
+        )?;
     }
     Ok(())
 }
