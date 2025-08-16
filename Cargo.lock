@@ -2776,6 +2776,7 @@ dependencies = [
 [[package]]
 name = "tetrizz"
 version = "0.1.0"
+source = "git+https://github.com/yaahc/tetrizz.git#fb66bde9761230c837541606a5e113c836f87150"
 dependencies = [
  "dhat",
  "enum-map",

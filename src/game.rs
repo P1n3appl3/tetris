@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use log::debug;
+use log::{debug, info};
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use tetrizz::beam_search::Node;
 use web_time::{Instant, SystemTime};
@@ -30,7 +30,7 @@ pub struct Lookahead {
 
 impl Lookahead {
     pub fn new(min_placements: usize, timeout: u16) -> Self {
-        Self { min_placements, timeout, board_visible: true, next_piece_goal: 0 }
+        Self { min_placements, timeout, board_visible: true, next_piece_goal: min_placements }
     }
 }
 
@@ -42,6 +42,7 @@ pub enum Mode {
     // Cheese { target_lines: u16 },
     TrainingLab {
         lookahead: Option<Lookahead>,
+        search: bool,
         // search config
     },
 }
@@ -64,14 +65,24 @@ impl Mode {
     pub fn search_enabled(&self) -> bool {
         match self {
             Mode::Sprint { .. } => false,
-            Mode::TrainingLab { .. } => true,
+            Mode::TrainingLab { search, .. } => *search,
         }
     }
 
     fn lookahead_timeout(&self) -> u16 {
         match self {
-            Mode::TrainingLab { lookahead: Some(lookahead) } => lookahead.timeout,
+            Mode::TrainingLab { lookahead: Some(lookahead), .. } => lookahead.timeout,
             _ => unreachable!(),
+        }
+    }
+
+    fn start(&mut self) {
+        match self {
+            Mode::TrainingLab { lookahead: Some(lookahead), .. } => {
+                lookahead.board_visible = true;
+                lookahead.next_piece_goal = lookahead.min_placements;
+            }
+            _ => {}
         }
     }
 }
@@ -162,21 +173,21 @@ impl Game {
 
     pub fn should_draw_board(&self) -> bool {
         match &self.mode {
-            Mode::TrainingLab { lookahead: Some(lookahead) } => lookahead.board_visible,
+            Mode::TrainingLab { lookahead: Some(lookahead), .. } => lookahead.board_visible,
             _ => true,
         }
     }
 
     pub fn should_draw_hold(&self) -> bool {
         match &self.mode {
-            Mode::TrainingLab { lookahead: Some(lookahead) } => lookahead.board_visible,
+            Mode::TrainingLab { lookahead: Some(lookahead), .. } => lookahead.board_visible,
             _ => true,
         }
     }
 
     pub fn should_draw_queue(&self) -> bool {
         match &self.mode {
-            Mode::TrainingLab { lookahead: Some(lookahead) } => lookahead.board_visible,
+            Mode::TrainingLab { lookahead: Some(lookahead), .. } => lookahead.board_visible,
             _ => true,
         }
     }
@@ -228,6 +239,7 @@ impl Game {
                 self.pop_piece();
             }
         }
+        self.mode.start();
         sound.play(Meta::Go).ok();
         // TODO: combine "ready" and "go" sounds
         // TODO: make startup time configurable or maybe even based on the sound length?
@@ -236,13 +248,14 @@ impl Game {
     }
 
     pub fn handle(&mut self, event: Event, time: Instant, sound: &SoundPlayer<impl Sink>) -> bool {
-        use {Event::*, GameState::*, InputEvent::*, TimerEvent::*};
-        self.time = time;
-        debug!("handling event: {event:?}");
+        use {Event::*, TimerEvent::*};
+        let ret = self._handle(event, time, sound);
         match event {
-            Input(_) => match &mut self.mode {
-                Mode::TrainingLab { lookahead: Some(lookahead) } => {
-                    if !lookahead.board_visible && self.pieces >= lookahead.next_piece_goal {
+            Input(kind) => match &mut self.mode {
+                Mode::TrainingLab { lookahead: Some(lookahead), .. } => {
+                    if lookahead.board_visible && kind != InputEvent::Undo {
+                        lookahead.board_visible = false;
+                    } else if self.pieces >= lookahead.next_piece_goal {
                         self.clear_timer(Lookahead);
                         self.set_timer(Lookahead);
                     }
@@ -251,6 +264,13 @@ impl Game {
             },
             _ => {}
         }
+        ret
+    }
+
+    pub fn _handle(&mut self, event: Event, time: Instant, sound: &SoundPlayer<impl Sink>) -> bool {
+        use {Event::*, GameState::*, InputEvent::*, TimerEvent::*};
+        self.time = time;
+        debug!("handling event: {event:?}");
         match event {
             Input(PressLeft) => {
                 if self.state == Running && self.try_move((-1, 0)) {
@@ -317,32 +337,37 @@ impl Game {
                     return false;
                 };
                 self.board = prev.board;
-                debug_assert!(
+                assert!(
                     self.spawn(prev.current.piece),
                     "shouldn't be invalid since that piece was able to be placed"
                 );
                 self.hold = prev.hold;
                 self.upcomming = prev.upcomming;
+                self.pieces -= 1;
+                self.spins = prev.spins;
+                match &mut self.mode {
+                    Mode::TrainingLab { lookahead: Some(lookahead), .. } => {
+                        lookahead.board_visible = true;
+                        lookahead.next_piece_goal = self.pieces + lookahead.min_placements;
+                    }
+                    _ => {}
+                }
             }
             Input(Hard) | Timer(Lock | Extended | Timeout) => {
-                let moment = Moment {
-                    board: self.board,
-                    current: self.current,
-                    hold: self.hold,
-                    upcomming: self.upcomming.clone(),
-                    spins: self.spins.clone(),
-                };
+                self.hard_drop(sound);
                 // at 536 bytes per Moment, we store 200 moves (107.2kB) max
                 if self.history.len() > 200 {
                     self.history.pop_front();
                 }
-                self.history.push_back(moment);
-                self.hard_drop(sound);
                 return true;
             }
             Timer(t @ (SoftDrop | Gravity)) => {
                 if self.state == Running {
-                    self.try_drop();
+                    if self.config.soft_drop == 0 {
+                        while self.try_drop() {}
+                    } else {
+                        self.try_drop();
+                    }
                 }
                 self.set_timer(t);
             }
@@ -383,14 +408,7 @@ impl Game {
                     let mut game = self.clone();
                     game.config.ghost = false;
                     for (m, _) in &suggestion.moves {
-                        log::info!(
-                            "{:?} x:{} y:{} {:?} spin:{}",
-                            m.piece,
-                            m.x,
-                            m.y,
-                            m.rotation,
-                            m.spun
-                        );
+                        info!("{:?} x:{} y:{} {:?} spin:{}", m.piece, m.x, m.y, m.rotation, m.spun);
                     }
                     self.solution = Some((suggestion.clone(), Box::new(game)));
                 }
@@ -407,7 +425,7 @@ impl Game {
                 todo!()
             }
             Timer(Lookahead) => match &mut self.mode {
-                Mode::TrainingLab { lookahead: Some(lookahead) } => {
+                Mode::TrainingLab { lookahead: Some(lookahead), .. } => {
                     lookahead.board_visible = true;
                     lookahead.next_piece_goal = self.pieces + lookahead.min_placements;
                 }
@@ -527,9 +545,9 @@ impl Game {
     }
 
     pub fn lock(&mut self) -> bool {
-        log::info!("pos: {:?}", self.current.pos);
+        info!("pos: {:?}", self.current.pos);
         for (x, y) in self.current.blocks() {
-            log::info!("{x} {y}");
+            info!("{x} {y}");
             self.board[y as usize][x as usize] = Cell::Piece(self.current.piece);
         }
         for i in (0..23).rev() {
@@ -637,8 +655,8 @@ impl Game {
             }
         }
         if piece == Piece::I {
-            log::info!("pos: {pos:?}");
-            log::info!("kicks: {kicks:?}");
+            info!("pos: {pos:?}");
+            info!("kicks: {kicks:?}");
         }
         false
     }
