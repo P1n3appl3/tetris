@@ -156,6 +156,7 @@ pub async fn load_skin(url: &str) -> Result<Skin, JsValue> {
     let formats = [("png", Png), ("webp", WebP), ("qoi", Qoi), ("gif", Gif)];
     let format = formats.iter().find_map(|(s, f)| mime.contains(s).then_some(*f)).unwrap_or(Png);
 
+    // TODO: don't do image decoding in wasm, use the browser api, maybe for slicing too?
     let mut image = image::load_from_memory_with_format(&image_data.to_vec(), format).unwrap();
     assert_eq!(
         image.width(),

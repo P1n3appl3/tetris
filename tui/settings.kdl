@@ -53,7 +53,8 @@ sound {
     action {
         move "https://ecdldaiiere.github.io/Eddiez-Soundz/TFmove.mp3"
         rotate "https://ecdldaiiere.github.io/Eddiez-Soundz/TF_rotate.mp3"
-        lock "https://ecdldaiiere.github.io/Eddiez-Soundz/TFlock.mp3"
+        hard-drop "https://ecdldaiiere.github.io/Eddiez-Soundz/TFlock.mp3"
+        lock "https://konsola5.github.io/jstris_sounds/TETRIO_Sounds/floor.ogg"
         hold "https://ecdldaiiere.github.io/Eddiez-Soundz/TFhold.mp3"
         spin "https://jstrisplus.github.io/jstris-plus-assets/sfxPacks/tetrio/spin.ogg"
     }

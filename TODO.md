@@ -1,26 +1,30 @@
-## general features
+# ui
 
 - show combo counter/attack lines with gauge
 - make rotation return whether or not a kick/spin happened (for different sound)
+- show lines remaining with different background above the last line
+- configure queue length
 
-## ui
+## tui
 
 - background grid in light grey and black
   - does ghost piece overlay or occlude?
+- set colors
 - headers for next piece queue and hold sections
-- block skins, try "[]" like in tgm
-- show lines remaining in sprint with background color
+- mino skins, try "[]" like in tgm
 
 ### web
 
 - try trunkrs.dev for development
 - add lib.rs/fumen and allow pasting in boards
   - maybe use mxmoss.me/sketris instead of fumens...
+- add board size slider to graphics settings
+- hover css animation on border of details sections for settings
 
-## practice
+# lab
 
-- undo key
 - finesse
+- paint minos on in any mode with either garbage or piece shape detection
 - follow replay (show ghost piece)
 - combo (4 wide like apotris)
   - rewind when made impossible
@@ -33,7 +37,6 @@
   - <https://blox.askplays.com/?opener=Mountainous+Stacking+2>
     - side note: the way they do lock delay is really cool: start with big timer that's
       shown as bottom screen bar, then every rotation increase the starting point of that bar
-- choose next queue length
 - setups from <https://four.lol>
   - give valid bags
   - track percent success

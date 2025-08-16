@@ -66,9 +66,9 @@
         inherit cargoArtifacts;
         doCheck = false; # there's a separate check for that
       } // {
-        cargoExtraArgs = "-p cli";
+        cargoExtraArgs = "-p tui";
         postInstall = ''
-          mv $out/bin/cli $out/bin/tetris
+          mv $out/bin/tui $out/bin/tetris
         '' + (pkgs.lib.optionalString (pkgs.stdenv.isLinux) ''
           wrapProgram $out/bin/tetris \
             --set-default "ALSA_PLUGIN_DIR" "${pkgs.alsa-plugins}/lib/alsa-lib"
@@ -108,9 +108,12 @@
       devShells.default = craneLib.devShell {
         inputsFrom = [ tetris ];
         checks = self.checks.${system};
+        INTER="${pkgs.inter}/share/fonts/truetype/InterVariable.ttf";
         packages = with pkgs; [
           rust-analyzer
-          wasm-pack static-web-server
+          inter
+          wasm-pack minify
+          static-web-server
         ] ++ jstrisScriptDeps;
       };
     }

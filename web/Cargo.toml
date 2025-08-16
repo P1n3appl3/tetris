@@ -10,18 +10,20 @@ crate-type = ["cdylib"]
 tetris = { path = ".." }
 image = { version = "0.25", default-features = false, features = [
     "png",
-    "qoi",
-    "gif",
     "webp",
+    # "qoi",
+    # "gif",
 ] }
 ultraviolet = { version = "0.10", features = ["f64"] }
+ringbuffer.workspace = true
+web-time.workspace = true
 futures.workspace = true
+anyhow.workspace = true
 log.workspace = true
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 wasm-logger = "0.2"
 wasm-repeated-animation-frame = "0.1"
-web-time.workspace = true
 console_error_panic_hook = "0.1"
 getrandom = { version = "0.3", features = ["wasm_js"] }
 web-sys = { version = "0.3", features = [
@@ -38,5 +40,3 @@ web-sys = { version = "0.3", features = [
     'KeyboardEvent',
     "console",
 ] }
-anyhow.workspace = true
-ringbuffer.workspace = true

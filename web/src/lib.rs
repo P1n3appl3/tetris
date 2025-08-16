@@ -1,16 +1,14 @@
 mod fps;
 mod graphics;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::mpsc::{self, Receiver, channel};
 
 use log::info;
 use tetris::sound::{NullSink, Sink, SoundPlayer};
 use tetris::{Config, Event, Game, GameState, InputEvent};
 use wasm_bindgen::prelude::*;
-use web_sys::{HtmlCanvasElement, HtmlDivElement, KeyboardEvent};
+use web_sys::{Document, HtmlCanvasElement, HtmlDivElement, KeyboardEvent};
 use web_time::Instant;
 
 use crate::fps::FPSCounter;
@@ -21,8 +19,6 @@ pub async fn main() -> Result<(), JsValue> {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
     wasm_logger::init(wasm_logger::Config::new(log::Level::Debug));
     info!("wasm blob initialized, running main...");
-    let (tx, rx) = channel();
-    init_input_handlers(tx)?;
     let window = web_sys::window().unwrap();
     let doc = window.document().expect("Could not get document");
     let default_skin = "https://i.imgur.com/zjItrsg.png";
@@ -43,6 +39,8 @@ pub async fn main() -> Result<(), JsValue> {
         ghost: true,
     };
 
+    let (tx, rx) = channel();
+    init_input_handlers(doc, tx)?;
     let (mut raf_loop, _canceler) = wasm_repeated_animation_frame::RafLoop::new();
     let mut fps = fps::FPSCounter::new();
     let mut game = Game::new(config);
@@ -134,9 +132,21 @@ fn run_loop(
     graphics::draw_hold(game, hold, skin).unwrap();
 }
 
-fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
+fn init_input_handlers(doc: Document, events: mpsc::Sender<Event>) -> Result<(), JsValue> {
     info!("initializing input handlers");
-    let window = web_sys::window().expect("could not get window handle");
+    #[derive(Clone, Debug)]
+    pub struct Bindings {
+        pub left: String,
+        pub right: String,
+        pub soft: String,
+        pub hard: String,
+        pub cw: String,
+        pub ccw: String,
+        pub flip: String,
+        pub hold: String,
+        pub undo: String,
+        pub restart: String,
+    }
 
     use tetris::InputEvent::*;
     let keymap = [
@@ -168,10 +178,10 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
     });
 
     let closure = Closure::wrap(closure);
-    window.add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref())?;
+    let div = doc.get_element_by_id("main").unwrap().dyn_into::<web_sys::HtmlDivElement>()?;
+    div.add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref())?;
     closure.forget();
 
-    let input = Rc::new(RefCell::new(window));
     let keymap = [("j", ReleaseLeft), ("l", ReleaseRight), ("k", ReleaseSoft)]
         .into_iter()
         .collect::<HashMap<&'static str, InputEvent>>();
@@ -187,9 +197,7 @@ fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
     });
 
     let closure = Closure::wrap(closure);
-    input
-        .borrow_mut()
-        .add_event_listener_with_callback("keyup", closure.as_ref().unchecked_ref())?;
+    div.add_event_listener_with_callback("keyup", closure.as_ref().unchecked_ref())?;
     closure.forget();
 
     Ok(())

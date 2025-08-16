@@ -184,10 +184,7 @@ impl Game {
                     return;
                 };
                 self.board = prev.board;
-                debug_assert!(
-                    self.spawn(prev.current),
-                    "shouldn't be invalid since that piece was able to be placed"
-                );
+                self.spawn(prev.current);
                 self.hold = prev.hold;
                 self.upcomming = prev.upcomming;
             }
@@ -281,7 +278,7 @@ impl Game {
             Lock => c.lock_delay.0,
             Extended => c.lock_delay.1,
             Timeout => c.lock_delay.2,
-            Start => 120,
+            Start => 60,
             Are => todo!(),
         };
         let time = self.time + FRAME * frames as u32;

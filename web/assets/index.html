@@ -8,7 +8,7 @@
         <title>yay it works</title>
     </head>
     <body>
-        <div id="main">
+        <div id="main" tabindex="0">
             <div id="left">
                 <canvas id="hold" width="96" height="96"></canvas>
             </div>
@@ -44,11 +44,11 @@
                 <input type="text" class="keybinding" id="hard-key" value="space" />
             </label>
             <label>
-                rotate cw
+                <span> rotate <img src="./cw.svg" class="icon" /> </span>
                 <input type="text" class="keybinding" id="cw-key" value="f" />
             </label>
             <label>
-                rotate ccw
+                <span>rotate <img src="./ccw.svg" class="icon" /></span>
                 <input type="text" class="keybinding" id="ccw-key" value="d" />
             </label>
             <label>
@@ -64,9 +64,9 @@
             <label>
                 undo <input type="text" class="keybinding" id="undo-key" value="w" />
             </label>
-            <label>
+            <!-- <label>
                 redo <input type="text" class="keybinding" id="redo-key" value="e" />
-            </label>
+            </label> -->
         </details>
         <details>
             <summary>gameplay</summary>
@@ -86,7 +86,7 @@
             <!-- TODO: lock delay -->
             <hr />
             <label>
-                rotation system:
+                rotation/kicks:
                 <select name="kick" id="kick-select">
                     <option>SRS</option>
                     <option>SRS+</option>
@@ -168,17 +168,25 @@
             </label>
             <details>
                 <summary>actions</summary>
-                <label>move<input type="url" placeholder="url of sound file..."/></label>
-                <label>rotate<input type="url" placeholder="url of sound file..."/></label>
-                <label>spin<input type="url" placeholder="url of sound file..."/></label>
-                <label>minispin<input type="url" placeholder="url of sound file..."/></label>
-                <label>land<input type="url" placeholder="url of sound file..."/></label>
-                <label>hard-drop<input type="url" placeholder="url of sound file..."/></label>
-                <label>soft-drop<input type="url" placeholder="url of sound file..."/></label>
-                <label>gravity<input type="url" placeholder="url of sound file..."/></label>
-                <label>lock<input type="url" placeholder="url of sound file..."/></label>
-                <label>hold<input type="url" placeholder="url of sound file..."/></label>
-                <label>nohold<input type="url" placeholder="url of sound file..."/></label>
+                <label>move<input type="url" placeholder="url of sound file..." /></label>
+                <label>rotate<input type="url" placeholder="url of sound file..." /></label>
+                <label>spin<input type="url" placeholder="url of sound file..." /></label>
+                <label
+                    >minispin<input type="url" placeholder="url of sound file..."
+                /></label>
+                <label>land<input type="url" placeholder="url of sound file..." /></label>
+                <label
+                    >hard-drop<input type="url" placeholder="url of sound file..."
+                /></label>
+                <label
+                    >soft-drop<input type="url" placeholder="url of sound file..."
+                /></label>
+                <label
+                    >gravity<input type="url" placeholder="url of sound file..."
+                /></label>
+                <label>lock<input type="url" placeholder="url of sound file..." /></label>
+                <label>hold<input type="url" placeholder="url of sound file..." /></label>
+                <label>nohold<input type="url" placeholder="url of sound file..." /></label>
             </details>
             <details>
                 <summary>line clears</summary>
@@ -248,7 +256,7 @@
         </details>
     </div>
     <script type="module">
-        import init, { main } from "./pkg/web.js";
+        import init, { main } from "./tetris.js";
         async function run() {
             await init();
             await main();

@@ -1,9 +1,21 @@
 #!/usr/bin/env bash
+set -e
 
 dir=$(dirname "$0")
+output=$(pwd)/.site
 
-wasm-pack build --target web "$dir" "$@"
+mkdir -p "$output"
 
-# TODO: entr, concat separate js file and copy assets into clean dir
-echo -e "now run:\n\n    static-web-server -d $dir -p 8080\n"
+wasm-pack build --target web --out-dir "$output" --out-name tetris "$dir" "$@"
+rm "$output"/{*.ts,package.json}
+
+minify -o "$output" "$dir"/assets/{*.html,*.css,*.svg}
+
+cp "$INTER" "$output/"
+chmod +w "$output/$(basename "$INTER")"
+cp "$dir/assets/icon.png" "$output/"
+
+# TODO: entr (or minify -w)
+echo -e "\nbundle size: $(du -sh .site)"
+echo -e "now run:\n\n    static-web-server -d $output -p 8080\n"
 echo "...and then open http://localhost:8080 in a browser"

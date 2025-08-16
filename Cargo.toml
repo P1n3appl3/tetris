@@ -1,6 +1,6 @@
 [workspace]
-members = ["cli", "web"]
-default-members = ["cli"]
+members = ["tui", "web"]
+default-members = ["tui"]
 
 [workspace.dependencies]
 log = "0.4"

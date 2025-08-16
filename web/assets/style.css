@@ -1,10 +1,11 @@
+@font-face {
+    font-family: "Inter";
+    src: url("./InterVariable.ttf");
+}
 html {
     background-color: rgb(17, 17, 17);
     color: lavenderblush;
-    /*TODO: ship a font*/
-    font-family:
-        Noto Sans,
-        sans;
+    font-family: Inter; /*TODO: bundle font?*/
 }
 body {
     display: flex;
@@ -27,6 +28,10 @@ details {
 a {
     color: #8cb4ff;
 }
+img.icon {
+    height: 1em;
+    width: 1em;
+}
 #main {
     float: left;
     position: relative;
@@ -35,14 +40,14 @@ a {
     transform: translate(0px);
 }
 #left {
-    margin-right: 10px;
+    margin-right: 24px;
     float: left;
 }
 #center {
     float: left;
 }
 #right {
-    margin-left: 10px;
+    margin-left: 24px;
     float: left;
 }
 #board {
@@ -69,15 +74,13 @@ a {
     overflow-x: hidden;
     padding: 5px;
     margin-top: 60px;
-    /*transition: 0.5s;*/
     display: flex;
     flex-direction: column;
-    /*border: 1px dashed white;*/
 }
 
 .settings details {
     padding: 5px;
-    border: 1px solid white;
+    border: 1px dotted peachpuff;
 }
 
 .settings details > div {
@@ -102,6 +105,6 @@ a {
 .keybinding {
     max-width: 100px;
 }
-.num-select  {
+.num-select {
     max-width: 50px;
 }
