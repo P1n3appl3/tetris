@@ -111,7 +111,7 @@
         INTER="${pkgs.inter}/share/fonts/truetype/InterVariable.ttf";
         packages = with pkgs; [
           rust-analyzer
-          inter
+          inter woff2
           wasm-pack minify
           static-web-server
         ] ++ jstrisScriptDeps;
