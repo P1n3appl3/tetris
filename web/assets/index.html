@@ -28,45 +28,26 @@
     <div class="settings">
         <details>
             <summary>keybinds</summary>
-            <button id="bind_all">bind all</button>
-            <button id="reset-bindings">reset</button>
-            <label>
-                left <input type="text" class="keybinding" id="right-key" value="l" />
-            </label>
-            <label>
-                right <input type="text" class="keybinding" id="left-key" value="j" />
-            </label>
-            <label>
-                soft-drop <input type="text" class="keybinding" id="soft-key" value="k" />
-            </label>
-            <label>
-                hard-drop
-                <input type="text" class="keybinding" id="hard-key" value="space" />
-            </label>
+            <button id="bind-all" style="float: right">bind all</button>
+            <button id="reset-bindings" style="float: right">reset</button>
+            <div style="clear: both; padding: 0px"></div>
+            <label> left <button id="left-key">j</button> </label>
+            <label> right <button id="right-key">l</button> </label>
+            <label> soft-drop <button id="soft-key">k</button> </label>
+            <label> hard-drop <button id="hard-key">space</button> </label>
             <label>
                 <span> rotate <img src="./cw.svg" class="icon" /> </span>
-                <input type="text" class="keybinding" id="cw-key" value="f" />
+                <button id="cw-key">f</button>
             </label>
             <label>
-                <span>rotate <img src="./ccw.svg" class="icon" /></span>
-                <input type="text" class="keybinding" id="ccw-key" value="d" />
+                <span> rotate <img src="./ccw.svg" class="icon" /> </span>
+                <button id="ccw-key">d</button>
             </label>
-            <label>
-                rotate 180° <input type="text" class="keybinding" id="flip-key" value="s" />
-            </label>
-            <label>
-                hold <input type="text" class="keybinding" id="hold-key" value="a" />
-            </label>
+            <label> flip <button id="flip-key">s</button> </label>
+            <label> hold <button id="hold-key">a</button> </label>
             <hr />
-            <label>
-                restart <input type="text" class="keybinding" id="restart-key" value="r" />
-            </label>
-            <label>
-                undo <input type="text" class="keybinding" id="undo-key" value="w" />
-            </label>
-            <!-- <label>
-                redo <input type="text" class="keybinding" id="redo-key" value="e" />
-            </label> -->
+            <label> restart <button id="restart-key">r</button> </label>
+            <label> undo <button id="undo-key">u</button> </label>
         </details>
         <details>
             <summary>gameplay</summary>

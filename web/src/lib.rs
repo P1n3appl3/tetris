@@ -1,19 +1,14 @@
 mod fps;
 mod graphics;
+mod input;
 
-use std::collections::HashMap;
-use std::sync::mpsc::{self, Receiver, channel};
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{Receiver, channel};
 
-use bimap::BiHashMap;
 use log::info;
 use tetris::sound::{NullSink, Sink, SoundPlayer};
-use tetris::{Config, Event, Game, GameState, InputEvent};
+use tetris::{Config, Event, Game, GameState};
 use wasm_bindgen::prelude::*;
-use web_sys::{
-    AddEventListenerOptions, HtmlCanvasElement, HtmlDivElement, HtmlInputElement, KeyboardEvent,
-    Window,
-};
+use web_sys::{HtmlCanvasElement, HtmlDivElement};
 use web_time::Instant;
 
 use crate::fps::FPSCounter;
@@ -39,17 +34,18 @@ pub async fn main() -> Result<(), JsValue> {
         das: 6,
         arr: 0,
         gravity: 60,
-        soft_drop: 2,
+        soft_drop: 1,
         lock_delay: (60, 300, 1200),
         ghost: true,
     };
 
     let (tx, rx) = channel();
-    init_input_handlers(window, tx)?;
+    input::init_input_handlers(tx)?;
     let (mut raf_loop, _canceler) = wasm_repeated_animation_frame::RafLoop::new();
     let mut fps = fps::FPSCounter::new();
     let mut game = Game::new(config);
-    game.mode = tetris::Mode::Sprint { target_lines: 10 };
+    // game.mode = tetris::Mode::Sprint { target_lines: 10 };
+    game.mode = tetris::Mode::Practice;
     info!("starting event loop");
     let sound = SoundPlayer::<NullSink>::default();
     game.start(None, &sound);
@@ -135,105 +131,4 @@ fn run_loop(
     // could do these only when needed instead of every frame if we wanted
     graphics::draw_queue(game, queue, skin, 5).unwrap();
     graphics::draw_hold(game, hold, skin).unwrap();
-}
-
-fn init_input_handlers(window: Window, events: mpsc::Sender<Event>) -> Result<(), JsValue> {
-    info!("initializing input handlers");
-    let doc = window.document().unwrap();
-    let storage = window.local_storage().unwrap().unwrap();
-    let keymap = Arc::new(Mutex::new(BiHashMap::new()));
-    let keyupmap = Arc::new(Mutex::new(HashMap::new()));
-    let keydownmap = Arc::new(Mutex::new(HashMap::new()));
-    use InputEvent::*;
-    for (name, key, press, release) in [
-        ("left", "j", PressLeft, Some(ReleaseLeft)),
-        ("right", "l", PressRight, Some(ReleaseRight)),
-        ("hard", " ", Hard, None),
-        ("soft", "k", PressSoft, Some(ReleaseSoft)),
-        ("cw", "f", Cw, None),
-        ("ccw", "d", Ccw, None),
-        ("flip", "s", Flip, None),
-        ("hold", "a", Hold, None),
-        ("restart", "r", Restart, None),
-        ("undo", "u", Undo, None),
-    ] {
-        let initial = storage.get(name).unwrap().unwrap_or_else(|| key.to_owned());
-        let mut keymap = keymap.lock().unwrap();
-        // Node
-        let text = doc
-            .get_element_by_id(&format!("{name}-key"))
-            .unwrap()
-            .dyn_into::<web_sys::HtmlInputElement>()
-            .unwrap();
-        text.set_text_content(Some(key));
-        let handler = move |event: web_sys::Event| {
-            let input_elem: HtmlInputElement = event.target().unwrap().dyn_into().unwrap();
-
-            // app.store.borrow_mut().msg(&Msg::SetReflectivity(reflectivity));
-        };
-        let closure = Closure::wrap(Box::new(handler) as Box<dyn FnMut(_)>);
-        text.set_onclick(Some(closure.as_ref().unchecked_ref()));
-        // text.add_event_listener_with_callback_and_add_event_listener_options(type_, listener, options)
-        keymap.insert(name.to_owned(), key.to_owned());
-        keydownmap.lock().unwrap().insert(key, press);
-        if let Some(release) = release {
-            keyupmap.lock().unwrap().insert(key, release);
-        }
-    }
-
-    // let save_binding = Box::new({
-    //     move |keydown: KeyboardEvent| {
-    //         let next_keypress = Box::new(move |keydown: KeyboardEvent| {
-    //             if keydown.repeat() {
-    //                 return;
-    //             }
-    //             let key = keydown.key();
-    //             if let Some(&ev) = keymap.get(key.as_str()) {
-    //                 events.send(Event::Input(ev)).unwrap();
-    //             }
-    //         });
-    //         let closure = Closure::wrap(next_keypress);
-    //         let mut options = AddEventListenerOptions::new();
-    //         options.set_once(true); // TODO: this is deprecated, migrate to "capture"
-    //         doc.add_event_listener_with_callback_and_add_event_listener_options(
-    //             "keydown",
-    //             closure.as_ref().unchecked_ref(),
-    //             &options,
-    //         );
-    //     }
-    // });
-
-    // TODO: why doesn't focus work here?
-    // let div = doc.get_element_by_id("main").unwrap().dyn_into::<web_sys::HtmlDivElement>()?;
-
-    let closure: Box<dyn FnMut(_)> = Box::new({
-        let events = events.clone();
-        move |keydown: KeyboardEvent| {
-            if keydown.repeat() {
-                return;
-            }
-            let key = keydown.key();
-            if let Some(&ev) = keydownmap.lock().unwrap().get(key.as_str()) {
-                events.send(Event::Input(ev)).unwrap();
-            }
-        }
-    });
-    let closure = Closure::wrap(closure);
-    doc.add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref())?;
-    closure.forget();
-
-    let closure: Box<dyn FnMut(_)> = Box::new({
-        let events = events.clone();
-        move |keydown: web_sys::KeyboardEvent| {
-            let key = keydown.key();
-            if let Some(&ev) = keyupmap.lock().unwrap().get(key.as_str()) {
-                events.send(Event::Input(ev)).unwrap();
-            }
-        }
-    });
-    let closure = Closure::wrap(closure);
-    doc.add_event_listener_with_callback("keyup", closure.as_ref().unchecked_ref())?;
-    closure.forget();
-
-    Ok(())
 }

@@ -102,8 +102,9 @@ img.icon {
     box-sizing: border-box;
 }
 
-.keybinding {
-    max-width: 100px;
+.settings label button {
+    float: right;
+    width: 100px;
 }
 .num-select {
     max-width: 50px;
