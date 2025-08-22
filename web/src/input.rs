@@ -8,7 +8,7 @@ use bimap::BiHashMap;
 use log::{info, warn};
 use tetris::Event;
 use wasm_bindgen::prelude::*;
-use web_sys::{AddEventListenerOptions, KeyboardEvent};
+use web_sys::{AddEventListenerOptions, HtmlButtonElement, KeyboardEvent};
 
 use tetris::InputEvent;
 
@@ -22,11 +22,13 @@ pub fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
     let keydownmap = Arc::new(Mutex::new(HashMap::new()));
     use InputEvent::*;
     static BINDING_KEY: AtomicBool = AtomicBool::new(false);
+    static BINDING_ALL: AtomicBool = AtomicBool::new(false);
+
     let default = [
         ("left", "j", PressLeft, Some(ReleaseLeft)),
+        ("soft", "k", PressSoft, Some(ReleaseSoft)),
         ("right", "l", PressRight, Some(ReleaseRight)),
         ("hard", " ", Hard, None),
-        ("soft", "k", PressSoft, Some(ReleaseSoft)),
         ("cw", "f", Cw, None),
         ("ccw", "d", Ccw, None),
         ("flip", "s", Flip, None),
@@ -34,16 +36,26 @@ pub fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
         ("restart", "r", Restart, None),
         ("undo", "u", Undo, None),
     ];
-    // let bind_all = doc
-    //     .get_element_by_id("bind-all")
-    //     .unwrap()
-    //     .dyn_into::<web_sys::HtmlButtonElement>()
-    //     .unwrap();
-    let reset = doc
-        .get_element_by_id("reset-bindings")
-        .unwrap()
-        .dyn_into::<web_sys::HtmlButtonElement>()
-        .unwrap();
+    let bind_all =
+        doc.get_element_by_id("bind-all").unwrap().dyn_into::<HtmlButtonElement>().unwrap();
+    let bind_all_handler = move |event: web_sys::Event| {
+        let window = web_sys::window().unwrap();
+        let doc = window.document().unwrap();
+        BINDING_ALL.store(true, Relaxed);
+        doc.get_element_by_id(&format!("{}-key", default[0].0))
+            .unwrap()
+            .dyn_into::<HtmlButtonElement>()
+            .unwrap()
+            .click();
+        let this = event.target().unwrap().dyn_ref::<HtmlButtonElement>().unwrap().clone();
+        this.blur().unwrap();
+    };
+    let closure = Closure::wrap(Box::new(bind_all_handler) as Box<dyn FnMut(_)>);
+    bind_all.set_onclick(Some(closure.as_ref().unchecked_ref()));
+    std::mem::forget(closure);
+
+    let reset =
+        doc.get_element_by_id("reset-bindings").unwrap().dyn_into::<HtmlButtonElement>().unwrap();
     let reset_handler = {
         let keymap = keymap.clone();
         let keydownmap = keydownmap.clone();
@@ -58,7 +70,7 @@ pub fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
                 let button = doc
                     .get_element_by_id(&format!("{name}-key"))
                     .unwrap()
-                    .dyn_into::<web_sys::HtmlButtonElement>()
+                    .dyn_into::<HtmlButtonElement>()
                     .unwrap();
                 let storage = window.local_storage().unwrap().unwrap();
                 storage.remove_item(name).unwrap();
@@ -71,16 +83,14 @@ pub fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
             }
         }
     };
+
     let closure = Closure::wrap(Box::new(reset_handler) as Box<dyn FnMut(_)>);
     reset.set_onclick(Some(closure.as_ref().unchecked_ref()));
     std::mem::forget(closure);
     for (name, key, press, release) in default {
         let input_id = format!("{name}-key");
-        let button = doc
-            .get_element_by_id(&input_id)
-            .unwrap()
-            .dyn_into::<web_sys::HtmlButtonElement>()
-            .unwrap();
+        let button =
+            doc.get_element_by_id(&input_id).unwrap().dyn_into::<HtmlButtonElement>().unwrap();
         let rebind_key = {
             let keymap = keymap.clone();
             let keydownmap = keydownmap.clone();
@@ -100,7 +110,7 @@ pub fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
                 let button = doc
                     .get_element_by_id(&input_id)
                     .unwrap()
-                    .dyn_into::<web_sys::HtmlButtonElement>()
+                    .dyn_into::<HtmlButtonElement>()
                     .unwrap();
                 button.set_text_content(Some("<press key>"));
                 let next_keypress = move |keydown: KeyboardEvent| {
@@ -111,7 +121,7 @@ pub fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
                     let button = doc
                         .get_element_by_id(&input_id)
                         .unwrap()
-                        .dyn_into::<web_sys::HtmlButtonElement>()
+                        .dyn_into::<HtmlButtonElement>()
                         .unwrap();
                     let new = keydown.key();
                     if let Some(old) = keymap.lock().unwrap().get_by_left(name) {
@@ -128,6 +138,24 @@ pub fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
                     }
                     info!("finished handling key binding: {keymap:?}");
                     BINDING_KEY.store(false, Relaxed);
+
+                    if BINDING_ALL.load(Relaxed) {
+                        if name == default.last().unwrap().0 {
+                            BINDING_ALL.store(false, Relaxed);
+                        }
+                        for w in default.windows(2) {
+                            let [(l, _, _, _), (r, _, _, _)] = w else { unreachable!() };
+                            if *l != name {
+                                continue;
+                            }
+                            let next = doc
+                                .get_element_by_id(&format!("{r}-key"))
+                                .unwrap()
+                                .dyn_into::<HtmlButtonElement>()
+                                .unwrap();
+                            next.click();
+                        }
+                    }
                 };
                 let closure = Closure::wrap(Box::new(next_keypress) as Box<dyn FnMut(_)>);
                 let options = AddEventListenerOptions::new();
@@ -145,11 +173,12 @@ pub fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
         let closure = Closure::wrap(Box::new(rebind_key) as Box<dyn FnMut(_)>);
         button.set_onclick(Some(closure.as_ref().unchecked_ref()));
         std::mem::forget(closure);
+
         let initial = storage.get(name).unwrap().unwrap_or_else(|| key.to_owned());
         let mut keymap = keymap.lock().unwrap();
         keymap.insert(name.to_owned(), initial.to_owned());
         keydownmap.lock().unwrap().insert(initial.to_owned(), press);
-        button.set_text_content(Some(&format!("{initial}")));
+        button.set_text_content(Some(&initial));
         if let Some(release) = release {
             keyupmap.lock().unwrap().insert(initial.to_owned(), release);
         }
@@ -177,7 +206,7 @@ pub fn init_input_handlers(events: mpsc::Sender<Event>) -> Result<(), JsValue> {
 
     let closure: Box<dyn FnMut(_)> = Box::new({
         let events = events.clone();
-        move |keydown: web_sys::KeyboardEvent| {
+        move |keydown: KeyboardEvent| {
             let key = keydown.key();
             if let Some(&ev) = keyupmap.lock().unwrap().get(key.as_str()) {
                 events.send(Event::Input(ev)).unwrap();

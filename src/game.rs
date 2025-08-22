@@ -29,7 +29,7 @@ impl Mode {
     fn allows_undo(&self) -> bool {
         match self {
             Mode::Sprint { .. } => false,
-            Mode::Practice {} => true,
+            Mode::Practice => true,
         }
     }
 }

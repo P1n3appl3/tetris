@@ -2,7 +2,9 @@ use std::{fs::File, path::Path};
 
 use anyhow::Result;
 use rodio::{
-    source::{Amplify, Source}, static_buffer::StaticSamplesBuffer, Decoder, OutputStream, OutputStreamBuilder
+    Decoder, OutputStream, OutputStreamBuilder,
+    source::{Amplify, Source},
+    static_buffer::StaticSamplesBuffer,
 };
 
 use tetris::sound;

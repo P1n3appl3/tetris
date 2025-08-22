@@ -71,7 +71,7 @@ impl<T: Sink> SoundPlayer<T> {
     pub fn play(&self, sound: impl Into<Sound>) -> Result<()> {
         let sound = sound.into();
         for sound in std::iter::once(sound).chain(sound.fallback()) {
-            if let Some(sample) = self.sounds.get(&sound.into()) {
+            if let Some(sample) = self.sounds.get(&sound) {
                 self.sink.play(sample)?;
                 break;
             }
