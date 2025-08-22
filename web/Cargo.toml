@@ -15,6 +15,7 @@ image = { version = "0.25", default-features = false, features = [
     # "gif",
 ] }
 ultraviolet = { version = "0.10", features = ["f64"] }
+bimap = "0.6"
 ringbuffer.workspace = true
 web-time.workspace = true
 futures.workspace = true
@@ -32,11 +33,14 @@ web-sys = { version = "0.3", features = [
     "Element",
     "CanvasRenderingContext2d",
     "HtmlCanvasElement",
+    "HtmlInputElement",
     "HtmlDivElement",
     "ImageData",
     "ImageBitmap",
     "Response",
     "Blob",
-    'KeyboardEvent',
+    "Storage",
+    "KeyboardEvent",
+    "AddEventListenerOptions",
     "console",
 ] }

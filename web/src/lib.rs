@@ -3,12 +3,17 @@ mod graphics;
 
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, channel};
+use std::sync::{Arc, Mutex};
 
+use bimap::BiHashMap;
 use log::info;
 use tetris::sound::{NullSink, Sink, SoundPlayer};
 use tetris::{Config, Event, Game, GameState, InputEvent};
 use wasm_bindgen::prelude::*;
-use web_sys::{Document, HtmlCanvasElement, HtmlDivElement, KeyboardEvent};
+use web_sys::{
+    AddEventListenerOptions, HtmlCanvasElement, HtmlDivElement, HtmlInputElement, KeyboardEvent,
+    Window,
+};
 use web_time::Instant;
 
 use crate::fps::FPSCounter;
@@ -20,7 +25,7 @@ pub async fn main() -> Result<(), JsValue> {
     wasm_logger::init(wasm_logger::Config::new(log::Level::Debug));
     info!("wasm blob initialized, running main...");
     let window = web_sys::window().unwrap();
-    let doc = window.document().expect("Could not get document");
+    let doc = window.document().unwrap();
     let default_skin = "https://i.imgur.com/zjItrsg.png";
     let skin = graphics::load_skin(default_skin).await?;
     let board = doc.get_element_by_id("board").unwrap().dyn_into::<web_sys::HtmlCanvasElement>()?;
@@ -40,7 +45,7 @@ pub async fn main() -> Result<(), JsValue> {
     };
 
     let (tx, rx) = channel();
-    init_input_handlers(doc, tx)?;
+    init_input_handlers(window, tx)?;
     let (mut raf_loop, _canceler) = wasm_repeated_animation_frame::RafLoop::new();
     let mut fps = fps::FPSCounter::new();
     let mut game = Game::new(config);
@@ -132,37 +137,74 @@ fn run_loop(
     graphics::draw_hold(game, hold, skin).unwrap();
 }
 
-fn init_input_handlers(doc: Document, events: mpsc::Sender<Event>) -> Result<(), JsValue> {
+fn init_input_handlers(window: Window, events: mpsc::Sender<Event>) -> Result<(), JsValue> {
     info!("initializing input handlers");
-    #[derive(Clone, Debug)]
-    pub struct Bindings {
-        pub left: String,
-        pub right: String,
-        pub soft: String,
-        pub hard: String,
-        pub cw: String,
-        pub ccw: String,
-        pub flip: String,
-        pub hold: String,
-        pub undo: String,
-        pub restart: String,
+    let doc = window.document().unwrap();
+    let storage = window.local_storage().unwrap().unwrap();
+    let keymap = Arc::new(Mutex::new(BiHashMap::new()));
+    let keyupmap = Arc::new(Mutex::new(HashMap::new()));
+    let keydownmap = Arc::new(Mutex::new(HashMap::new()));
+    use InputEvent::*;
+    for (name, key, press, release) in [
+        ("left", "j", PressLeft, Some(ReleaseLeft)),
+        ("right", "l", PressRight, Some(ReleaseRight)),
+        ("hard", " ", Hard, None),
+        ("soft", "k", PressSoft, Some(ReleaseSoft)),
+        ("cw", "f", Cw, None),
+        ("ccw", "d", Ccw, None),
+        ("flip", "s", Flip, None),
+        ("hold", "a", Hold, None),
+        ("restart", "r", Restart, None),
+        ("undo", "u", Undo, None),
+    ] {
+        let initial = storage.get(name).unwrap().unwrap_or_else(|| key.to_owned());
+        let mut keymap = keymap.lock().unwrap();
+        // Node
+        let text = doc
+            .get_element_by_id(&format!("{name}-key"))
+            .unwrap()
+            .dyn_into::<web_sys::HtmlInputElement>()
+            .unwrap();
+        text.set_text_content(Some(key));
+        let handler = move |event: web_sys::Event| {
+            let input_elem: HtmlInputElement = event.target().unwrap().dyn_into().unwrap();
+
+            // app.store.borrow_mut().msg(&Msg::SetReflectivity(reflectivity));
+        };
+        let closure = Closure::wrap(Box::new(handler) as Box<dyn FnMut(_)>);
+        text.set_onclick(Some(closure.as_ref().unchecked_ref()));
+        // text.add_event_listener_with_callback_and_add_event_listener_options(type_, listener, options)
+        keymap.insert(name.to_owned(), key.to_owned());
+        keydownmap.lock().unwrap().insert(key, press);
+        if let Some(release) = release {
+            keyupmap.lock().unwrap().insert(key, release);
+        }
     }
 
-    use tetris::InputEvent::*;
-    let keymap = [
-        ("l", PressRight),
-        ("k", PressSoft),
-        ("j", PressLeft),
-        (" ", Hard),
-        ("f", Cw),
-        ("d", Ccw),
-        ("s", Flip),
-        ("a", Hold),
-        ("r", Restart),
-        ("u", Undo),
-    ]
-    .into_iter()
-    .collect::<HashMap<&'static str, InputEvent>>();
+    // let save_binding = Box::new({
+    //     move |keydown: KeyboardEvent| {
+    //         let next_keypress = Box::new(move |keydown: KeyboardEvent| {
+    //             if keydown.repeat() {
+    //                 return;
+    //             }
+    //             let key = keydown.key();
+    //             if let Some(&ev) = keymap.get(key.as_str()) {
+    //                 events.send(Event::Input(ev)).unwrap();
+    //             }
+    //         });
+    //         let closure = Closure::wrap(next_keypress);
+    //         let mut options = AddEventListenerOptions::new();
+    //         options.set_once(true); // TODO: this is deprecated, migrate to "capture"
+    //         doc.add_event_listener_with_callback_and_add_event_listener_options(
+    //             "keydown",
+    //             closure.as_ref().unchecked_ref(),
+    //             &options,
+    //         );
+    //     }
+    // });
+
+    // TODO: why doesn't focus work here?
+    // let div = doc.get_element_by_id("main").unwrap().dyn_into::<web_sys::HtmlDivElement>()?;
 
     let closure: Box<dyn FnMut(_)> = Box::new({
         let events = events.clone();
@@ -171,33 +213,26 @@ fn init_input_handlers(doc: Document, events: mpsc::Sender<Event>) -> Result<(),
                 return;
             }
             let key = keydown.key();
-            if let Some(&ev) = keymap.get(key.as_str()) {
+            if let Some(&ev) = keydownmap.lock().unwrap().get(key.as_str()) {
                 events.send(Event::Input(ev)).unwrap();
             }
         }
     });
-
     let closure = Closure::wrap(closure);
-    let div = doc.get_element_by_id("main").unwrap().dyn_into::<web_sys::HtmlDivElement>()?;
-    div.add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref())?;
+    doc.add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref())?;
     closure.forget();
-
-    let keymap = [("j", ReleaseLeft), ("l", ReleaseRight), ("k", ReleaseSoft)]
-        .into_iter()
-        .collect::<HashMap<&'static str, InputEvent>>();
 
     let closure: Box<dyn FnMut(_)> = Box::new({
         let events = events.clone();
         move |keydown: web_sys::KeyboardEvent| {
             let key = keydown.key();
-            if let Some(&ev) = keymap.get(key.as_str()) {
+            if let Some(&ev) = keyupmap.lock().unwrap().get(key.as_str()) {
                 events.send(Event::Input(ev)).unwrap();
             }
         }
     });
-
     let closure = Closure::wrap(closure);
-    div.add_event_listener_with_callback("keyup", closure.as_ref().unchecked_ref())?;
+    doc.add_event_listener_with_callback("keyup", closure.as_ref().unchecked_ref())?;
     closure.forget();
 
     Ok(())

@@ -12,16 +12,19 @@ rm -f "$output"/{*.ts,package.json}
 minify -o "$output" "$dir"/assets/{*.html,*.css,*.svg} "$output/tetris.js"
 cp "$dir/assets/icon.png" "$output/"
 
-if [ "${INTER##*.}" = "ttf" ]; then
-    cp "$INTER" "$output/Inter.ttf"
-    woff2_compress "$output/Inter.ttf"
-elif [ "${INTER##*.}" = "woff2" ]; then
-    cp "$INTER" "$output/Inter.woff2"
-else
-    echo "Font not recognized:"
-    echo "set $$INTER to the path of a file in either the ttf or woff2 format"
+if [ ! -f "$output/Inter.woff2" ]; then
+    if [ "${INTER##*.}" = "ttf" ]; then
+        temp="$output/Inter.ttf"
+        cp "$INTER" "$temp"
+        woff2_compress "$temp"
+        chmod +w "$temp"
+        rm -f "$temp"
+    elif [ "${INTER##*.}" = "woff2" ]; then
+        cp "$INTER" "$output/Inter.woff2"
+    else
+        echo "set $$INTER to the path of a file in either the ttf or woff2 format"
+    fi
 fi
-chmod +w "$output/Inter.woff2"
 
 # TODO: entr (or minify -w)
 echo -e "\nbundle size: $(du -sh .site)"
