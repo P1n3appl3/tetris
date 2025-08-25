@@ -2,9 +2,13 @@ mod fps;
 mod graphics;
 mod input;
 
-use std::sync::mpsc::{Receiver, channel};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+use std::sync::mpsc::{self, channel, Receiver};
 
 use log::info;
+use tetris::game::Lookahead;
 use tetris::sound::{NullSink, Sink, SoundPlayer};
 use tetris::{Config, Event, Game, GameState};
 use wasm_bindgen::prelude::*;
@@ -33,7 +37,7 @@ pub async fn main() -> Result<(), JsValue> {
     let config = Config {
         das: 6,
         arr: 0,
-        gravity: 60,
+        gravity: Some(60),
         soft_drop: 1,
         lock_delay: (60, 300, 1200),
         ghost: true,
@@ -45,7 +49,7 @@ pub async fn main() -> Result<(), JsValue> {
     let mut fps = fps::FPSCounter::new();
     let mut game = Game::new(config);
     // game.mode = tetris::Mode::Sprint { target_lines: 10 };
-    game.mode = tetris::Mode::Practice;
+    game.mode = tetris::Mode::TrainingLab { search: false, lookahead: Some(Lookahead::new(3, 30)) };
     info!("starting event loop");
     let sound = SoundPlayer::<NullSink>::default();
     game.start(None, &sound);
