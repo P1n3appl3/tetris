@@ -10,11 +10,11 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use log::error;
 use ringbuffer::RingBuffer;
 use termios::*;
-use tetris::{BG_COLOR, Color, Game, GameState, LOST_COLOR, Mode, Piece, Rotation};
+use tetris::{Color, Game, GameState, Mode, Piece, PieceLocation, Rotation, BG_COLOR, LOST_COLOR};
 use web_time::Instant;
 
 macro_rules! csi {
@@ -43,21 +43,26 @@ fn move_cursor(o: &mut StdoutLock, (x, y): (i16, i16)) -> Result<()> {
 pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
     let mut lock = io::stdout().lock();
     let o = &mut lock;
+
+    set_color(o, BG_COLOR)?;
+    write!(o, csi!("2J"))?;
+
     // Origin is top left of drawing area
     let (ox, oy) = (width / 2 - 19, height / 2 - 11);
     draw_board(o, game, (ox + 10, oy))?;
     if let Some(hold) = game.hold {
-        draw_piece(o, hold, (ox, oy + 2))?;
+        draw_piece(o, hold, (ox, oy + 4))?;
     }
     for i in 0..5 {
         draw_piece(
             o,
             *game.upcomming.get(i).ok_or(anyhow!("piece queue empty"))?,
-            (ox + 32, oy + 2 + 3 * i as i16),
+            (ox + 32, oy + 4 + 3 * i as i16),
         )?;
     }
     let text_color = (255, 255, 255);
     if let Mode::Sprint { target_lines: target } = game.mode {
+        set_color(o, BG_COLOR)?;
         draw_text(
             o,
             (ox + 34, oy + 20),
@@ -79,16 +84,103 @@ pub fn draw(width: i16, height: i16, game: &Game) -> Result<()> {
     } else {
         format!("{secs:2}.{decis:01} ")
     };
+    set_color(o, BG_COLOR)?;
     draw_text(o, (ox + 1, oy + 20), text_color, &time)?;
+    draw_spins(o, game, (ox, oy))?;
     Ok(o.flush()?)
 }
 
+fn draw_spins(o: &mut StdoutLock, game: &Game, (ox, oy): (i16, i16)) -> Result<()> {
+    let text_color = (255, 255, 255);
+    set_color(o, BG_COLOR)?;
+    let spins = Game::spin_shortlist(&game.spins);
+    if let Some((suggestion, solution)) = &game.solution {
+        // render selected solution
+        let mut game = solution.clone();
+        let last = suggestion.moves.len() - 1;
+        log::info!("{last}");
+        for (id, (m, i)) in suggestion.moves.iter().enumerate() {
+            let b2b = if m.spun && i.lines_cleared > 0 { " +1 b2b" } else { "" };
+            let m = format!("{:?} x:{} y:{} {:?}{}", m.piece, m.x, m.y, m.rotation, b2b);
+
+            draw_text(o, (ox - 30, oy + 5 + id as i16), text_color, &m)?;
+            if !b2b.is_empty() {
+                break;
+            }
+        }
+        for (ind, (loc, placement_info)) in suggestion.moves.iter().enumerate() {
+            log::info!("hold: {:?}", game.hold);
+            log::info!("current: {:?}", game.current);
+            log::info!("upcoming: {:?}", game.upcomming);
+            if game.hold.is_none() {
+                game.hold();
+                game.can_hold = true;
+            }
+            if Some(loc.piece) == game.hold.map(Into::into) {
+                game.hold();
+            } else {
+                assert_eq!(loc.piece, game.current.piece.into());
+            }
+            game.current.rot = loc.rotation.into();
+            game.current.pos = (loc.x, loc.y);
+            log::info!("current pre-lock: {:?}", game.current);
+            draw_board(o, &game, (ox + 40, oy))?;
+            o.flush()?;
+            std::thread::sleep(Duration::from_millis(400));
+            if ind == last || (loc.spun && placement_info.lines_cleared > 0) {
+                break;
+            }
+            game.lock();
+            draw_board(o, &game, (ox + 40, oy))?;
+            o.flush()?;
+            std::thread::sleep(Duration::from_millis(400));
+        }
+        log::info!("drawing solution board");
+    } else {
+        if game.history.is_empty() {
+            return Ok(());
+        }
+        let prev = game.history.back().unwrap();
+        // render available solutions
+        for (id, spin) in spins.iter().enumerate() {
+            let spin_move_position =
+                spin.moves.iter().position(|m| m.0.spun && m.1.lines_cleared > 0).unwrap();
+            let spin_move = spin.moves[spin_move_position];
+            let spin_summary = format!(
+                "{}: {:?} spin in {} pieces clearing {} lines",
+                id + 1,
+                spin_move.0.piece,
+                spin_move_position,
+                spin_move.1.lines_cleared,
+            );
+            let prev_moves = prev.spins.iter().map(|node| &node.moves).collect::<Vec<_>>();
+
+            let matches_previous_move = prev_moves.iter().any(|&prev_moveset| {
+                let prev_spin_move_position =
+                    prev_moveset.iter().position(|m| m.0.spun && m.1.lines_cleared > 0).unwrap();
+                let prev_spin_move = prev_moveset[prev_spin_move_position];
+                prev_spin_move.0.piece == spin_move.0.piece
+                    && prev_spin_move_position > spin_move_position
+            });
+            let solution_color = if matches_previous_move {
+                (0x03, 0xc0, 0x4a) // parakeet
+            } else {
+                BG_COLOR
+            };
+            set_color(o, solution_color)?;
+            draw_text(o, (ox - 30, oy + 5 + id as i16), text_color, &spin_summary)?;
+        }
+    }
+    Ok(())
+}
+
 fn draw_piece(o: &mut StdoutLock, piece: Piece, origin: (i16, i16)) -> Result<()> {
-    let pos = piece.get_pos(Rotation::North, (origin.0 as i8, origin.1 as i8));
+    let p = PieceLocation::new(piece, (origin.0 as _, origin.1 as _), Rotation::North);
+    let pos = p.blocks();
     let (x, y) = origin;
-    for dy in 0..4 {
+    for dy in -1..=0 {
         move_cursor(o, (x, y + dy))?;
-        for dx in 0..4 {
+        for dx in -1..=2 {
             set_color(
                 o,
                 if pos.contains(&(x as i8 + dx, (y - dy) as i8)) {
@@ -115,25 +207,27 @@ fn draw_text(
 
 fn draw_board(o: &mut StdoutLock, g: &Game, origin: (i16, i16)) -> Result<()> {
     let (ox, oy) = origin;
-    let (piece, pos, rot) = g.current;
-    let current_pos = piece.get_pos(rot, pos);
-    let ghost = piece.get_pos(rot, g.ghost_pos());
+    let current_pos = g.current.blocks();
+    let ghost_piece = g.ghost_pos();
+    let ghost = ghost_piece.blocks();
 
     set_color(o, BG_COLOR)?;
     write!(o, csi!("2J"))?;
     move_cursor(o, (ox, oy))?;
-    for y in 0..20i8 {
+    for y in 0..22i8 {
         move_cursor(o, (ox, oy + y as i16 + 1))?;
         for x in 0..10i8 {
-            let y = 19 - y;
+            let y = 21 - y;
             let mut color = g.board[y as usize][x as usize].color();
             if g.state == GameState::Done && color != Default::default() {
                 color = LOST_COLOR;
             } else if current_pos.contains(&(x, y)) && g.state == GameState::Running {
-                color = piece.color()
+                color = g.current.piece.color()
             } else if g.config.ghost && ghost.contains(&(x, y)) && g.state == GameState::Running {
-                let (r, g, b) = piece.color();
+                let (r, g, b) = g.current.piece.color();
                 color = (r / 3, g / 3, b / 3);
+            } else if y > 19 {
+                color = BG_COLOR;
             }
             set_color(o, color)?;
             write!(o, "  ")?;
