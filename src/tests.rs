@@ -6,8 +6,8 @@ use ringbuffer::RingBuffer;
 // use pretty_assertions::assert_eq;
 use super::{InputEvent::*, *};
 use crate::{
-    sound::{NullSink, SoundPlayer},
     Event,
+    sound::{NullSink, SoundPlayer},
 };
 
 impl From<PieceType> for Piece {

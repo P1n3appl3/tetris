@@ -78,12 +78,9 @@ impl Mode {
     }
 
     fn start(&mut self) {
-        match self {
-            Mode::TrainingLab { lookahead: Some(lookahead), .. } => {
-                lookahead.board_visible = true;
-                lookahead.next_piece_goal = lookahead.min_placements;
-            }
-            _ => {}
+        if let Mode::TrainingLab { lookahead: Some(lookahead), .. } = self {
+            lookahead.board_visible = true;
+            lookahead.next_piece_goal = lookahead.min_placements;
         }
     }
 }
@@ -316,19 +313,15 @@ impl Game {
     pub fn handle(&mut self, event: Event, time: Instant, sound: &SoundPlayer<impl Sink>) -> bool {
         use {Event::*, TimerEvent::*};
         let ret = self._handle(event, time, sound);
-        match event {
-            Input(kind) => match &mut self.mode {
-                Mode::TrainingLab { lookahead: Some(lookahead), .. } => {
-                    if lookahead.board_visible && kind != InputEvent::Undo {
-                        lookahead.board_visible = false;
-                    } else if self.pieces >= lookahead.next_piece_goal {
-                        self.clear_timer(Lookahead);
-                        self.set_timer(Lookahead);
-                    }
+        if let Input(kind) = event {
+            if let Mode::TrainingLab { lookahead: Some(lookahead), .. } = &mut self.mode {
+                if lookahead.board_visible && kind != InputEvent::Undo {
+                    lookahead.board_visible = false;
+                } else if self.pieces >= lookahead.next_piece_goal {
+                    self.clear_timer(Lookahead);
+                    self.set_timer(Lookahead);
                 }
-                _ => {}
-            },
-            _ => {}
+            }
         }
         ret
     }
@@ -411,12 +404,9 @@ impl Game {
                 self.upcomming = prev.upcomming;
                 self.pieces -= 1;
                 self.spins = prev.spins;
-                match &mut self.mode {
-                    Mode::TrainingLab { lookahead: Some(lookahead), .. } => {
-                        lookahead.board_visible = true;
-                        lookahead.next_piece_goal = self.pieces + lookahead.min_placements;
-                    }
-                    _ => {}
+                if let Mode::TrainingLab { lookahead: Some(lookahead), .. } = &mut self.mode {
+                    lookahead.board_visible = true;
+                    lookahead.next_piece_goal = self.pieces + lookahead.min_placements;
                 }
             }
             Input(Hard) | Timer(Lock | Extended | Timeout) => {
@@ -490,13 +480,12 @@ impl Game {
             Timer(Are) => {
                 todo!()
             }
-            Timer(Lookahead) => match &mut self.mode {
-                Mode::TrainingLab { lookahead: Some(lookahead), .. } => {
+            Timer(Lookahead) => {
+                if let Mode::TrainingLab { lookahead: Some(lookahead), .. } = &mut self.mode {
                     lookahead.board_visible = true;
                     lookahead.next_piece_goal = self.pieces + lookahead.min_placements;
                 }
-                _ => {}
-            },
+            }
         };
         // TODO: set lock timers if on the ground and they arent already set
         false

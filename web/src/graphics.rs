@@ -1,13 +1,13 @@
-use image::{imageops::FilterType, ImageFormat};
+use image::{ImageFormat, imageops::FilterType};
 use ringbuffer::RingBuffer;
 use tetris::{Cell, Game, GameState, Piece, PieceLocation, Rotation};
 use ultraviolet::DVec3;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    js_sys::{Uint8Array, Uint8ClampedArray},
-    Blob, CanvasRenderingContext2d, HtmlCanvasElement, HtmlDivElement, ImageBitmap, ImageData,
+    Blob, CanvasRenderingContext2d, HtmlCanvasElement, ImageBitmap, ImageData,
     Response,
+    js_sys::{Uint8Array, Uint8ClampedArray},
 };
 
 const SIZE: usize = 24;
