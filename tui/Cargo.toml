@@ -28,5 +28,5 @@ serde_json.workspace = true
 ringbuffer.workspace = true
 
 [features]
-default = ["url-assets"]
+# default = ["url-assets"]
 url-assets = ["dep:reqwest", "dep:cached-path"]

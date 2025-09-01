@@ -1,3 +1,5 @@
+#[cfg(not(feature = "url-assets"))]
+use std::path::PathBuf;
 use std::{fs, path::Path, str::FromStr};
 
 use anyhow::{Context, Result};
@@ -78,6 +80,8 @@ pub fn load(
                     node.entries().first().map(KdlEntry::value).and_then(KdlValue::as_string);
                 #[cfg(feature = "url-assets")]
                 let path = path.and_then(|p| cache.cached_path(p).ok());
+                #[cfg(not(feature = "url-assets"))]
+                let path = path.map(PathBuf::from);
                 if let Some(path) = path
                     && let Ok(variant) = Meta::from_str(node.name().value()).map(Into::into)
                     && let Ok(decoded) = Rodio::decode(&path)
@@ -100,6 +104,8 @@ pub fn load(
                     node.entries().first().map(KdlEntry::value).and_then(KdlValue::as_string);
                 #[cfg(feature = "url-assets")]
                 let path = path.and_then(|p| cache.cached_path(p).ok());
+                #[cfg(not(feature = "url-assets"))]
+                let path = path.map(PathBuf::from);
                 if let Some(path) = path
                     && let Ok(variant) = Action::from_str(node.name().value()).map(Into::into)
                     && let Ok(decoded) = Rodio::decode(&path)
@@ -122,6 +128,8 @@ pub fn load(
                     node.entries().first().map(KdlEntry::value).and_then(KdlValue::as_string);
                 #[cfg(feature = "url-assets")]
                 let path = path.and_then(|p| cache.cached_path(p).ok());
+                #[cfg(not(feature = "url-assets"))]
+                let path = path.map(PathBuf::from);
                 if let Some(path) = path
                     && let Ok(variant) = Clear::from_str(node.name().value()).map(Into::into)
                     && let Ok(decoded) = Rodio::decode(&path)

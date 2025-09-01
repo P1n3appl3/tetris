@@ -39,8 +39,10 @@ pub enum Mode {
     Sprint {
         target_lines: u16,
     },
-    // Cheese { target_lines: u16 },
-    TrainingLab {
+    Cheese {
+        target_lines: u16,
+    },
+    Practice {
         lookahead: Option<Lookahead>,
         search: bool,
         mino_mode: bool,
@@ -57,28 +59,23 @@ impl Mode {
     }
 
     fn allows_undo(&self) -> bool {
-        match self {
-            Mode::Sprint { .. } => false,
-            Mode::TrainingLab { .. } => true,
-        }
+        use Mode::*;
+        matches!(self, Sprint { .. } | Cheese { .. })
     }
 
     pub fn search_enabled(&self) -> bool {
-        match self {
-            Mode::Sprint { .. } => false,
-            Mode::TrainingLab { search, .. } => *search,
-        }
+        if let Mode::Practice { search, .. } = self { *search } else { false }
     }
 
     fn lookahead_timeout(&self) -> u16 {
         match self {
-            Mode::TrainingLab { lookahead: Some(lookahead), .. } => lookahead.timeout,
+            Mode::Practice { lookahead: Some(lookahead), .. } => lookahead.timeout,
             _ => unreachable!(),
         }
     }
 
     fn start(&mut self) {
-        if let Mode::TrainingLab { lookahead: Some(lookahead), .. } = self {
+        if let Mode::Practice { lookahead: Some(lookahead), .. } = self {
             lookahead.board_visible = true;
             lookahead.next_piece_goal = lookahead.min_placements;
         }
@@ -229,27 +226,28 @@ impl Game {
     pub fn draw_only_mino(&self) -> bool {
         match self.mode {
             Mode::Sprint { .. } => false,
-            Mode::TrainingLab { mino_mode, .. } => mino_mode,
+            Mode::Practice { mino_mode, .. } => mino_mode,
+            Mode::Cheese { target_lines } => todo!(),
         }
     }
 
     pub fn should_draw_board(&self) -> bool {
         match &self.mode {
-            Mode::TrainingLab { lookahead: Some(lookahead), .. } => lookahead.board_visible,
+            Mode::Practice { lookahead: Some(lookahead), .. } => lookahead.board_visible,
             _ => true,
         }
     }
 
     pub fn should_draw_hold(&self) -> bool {
         match &self.mode {
-            Mode::TrainingLab { lookahead: Some(lookahead), .. } => lookahead.board_visible,
+            Mode::Practice { lookahead: Some(lookahead), .. } => lookahead.board_visible,
             _ => true,
         }
     }
 
     pub fn should_draw_queue(&self) -> bool {
         match &self.mode {
-            Mode::TrainingLab { lookahead: Some(lookahead), .. } => lookahead.board_visible,
+            Mode::Practice { lookahead: Some(lookahead), .. } => lookahead.board_visible,
             _ => true,
         }
     }
@@ -310,11 +308,16 @@ impl Game {
         self.set_timer(TimerEvent::Start);
     }
 
-    pub fn handle(&mut self, event: Event, time: Instant, sound: &SoundPlayer<impl Sink>) -> bool {
+    pub fn handle_event(
+        &mut self,
+        event: Event,
+        time: Instant,
+        sound: &SoundPlayer<impl Sink>,
+    ) -> bool {
         use {Event::*, TimerEvent::*};
-        let ret = self._handle(event, time, sound);
+        let ret = self.handle(event, time, sound);
         if let Input(kind) = event {
-            if let Mode::TrainingLab { lookahead: Some(lookahead), .. } = &mut self.mode {
+            if let Mode::Practice { lookahead: Some(lookahead), .. } = &mut self.mode {
                 if lookahead.board_visible && kind != InputEvent::Undo {
                     lookahead.board_visible = false;
                 } else if self.pieces >= lookahead.next_piece_goal {
@@ -326,7 +329,7 @@ impl Game {
         ret
     }
 
-    pub fn _handle(&mut self, event: Event, time: Instant, sound: &SoundPlayer<impl Sink>) -> bool {
+    pub fn handle(&mut self, event: Event, time: Instant, sound: &SoundPlayer<impl Sink>) -> bool {
         use {Event::*, GameState::*, InputEvent::*, TimerEvent::*};
         self.time = time;
         debug!("handling event: {event:?}");
@@ -404,7 +407,7 @@ impl Game {
                 self.upcomming = prev.upcomming;
                 self.pieces -= 1;
                 self.spins = prev.spins;
-                if let Mode::TrainingLab { lookahead: Some(lookahead), .. } = &mut self.mode {
+                if let Mode::Practice { lookahead: Some(lookahead), .. } = &mut self.mode {
                     lookahead.board_visible = true;
                     lookahead.next_piece_goal = self.pieces + lookahead.min_placements;
                 }
@@ -475,13 +478,21 @@ impl Game {
                 }
             }
             Timer(Arr) => {
-                todo!()
+                let offset = match (self.started_left, self.started_right) {
+                    (Some(_), None) => -1,
+                    (Some(l), Some(r)) if l > r => -1,
+                    _ => 1,
+                };
+                if self.state == Running && self.try_move((offset, 0)) {
+                    sound.play(Action::Move).ok(); // TODO: arr sound?
+                }
+                self.set_timer(Arr);
             }
             Timer(Are) => {
                 todo!()
             }
             Timer(Lookahead) => {
-                if let Mode::TrainingLab { lookahead: Some(lookahead), .. } = &mut self.mode {
+                if let Mode::Practice { lookahead: Some(lookahead), .. } = &mut self.mode {
                     lookahead.board_visible = true;
                     lookahead.next_piece_goal = self.pieces + lookahead.min_placements;
                 }

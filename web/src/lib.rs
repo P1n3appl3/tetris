@@ -176,7 +176,7 @@ fn run_loop(
             || game.state == Startup
                 && matches!(e, Input(PressLeft | PressRight | ReleaseLeft | ReleaseRight))
         {
-            *new_piece |= game.handle(e, now, sound);
+            *new_piece |= game.handle_event(e, now, sound);
         }
     }
     if game.state == GameState::Done {
@@ -185,7 +185,7 @@ fn run_loop(
     while let Some(&(t, timer_event)) = game.timers.front() {
         if t < now {
             game.timers.pop_front();
-            game.handle(Event::Timer(timer_event), now, sound);
+            game.handle_event(Event::Timer(timer_event), now, sound);
         } else {
             break;
         }

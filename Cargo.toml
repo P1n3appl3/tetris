@@ -1,5 +1,5 @@
 [workspace]
-members = ["tui", "web"]
+members = [ "tui", "web" ]
 default-members = ["tui"]
 
 [workspace.dependencies]
@@ -14,7 +14,7 @@ web-time = "1"
 fumen = "0.1"
 strum = { version = "0.27", features = ["derive"] }
 ringbuffer = { version = "0.16", default-features = false }
-jstris-replay = { git = "https://github.com/rrbutani/jstris-replay", version = "0.1.0" }
+alea-rng = { path = "../jstris-replay", package = "alea-rng" }
 
 [package]
 name = "tetris"

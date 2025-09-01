@@ -9,5 +9,5 @@ struct Placement {
 }
 
 fn movegen() -> Vec<Placement> {
-
+    todo!()
 }

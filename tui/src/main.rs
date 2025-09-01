@@ -78,7 +78,7 @@ fn main() {
     let input = EventLoop::start(keys);
     let mut game = Game::new(config);
     game.mode = if args.practice {
-        Mode::TrainingLab { search: true, lookahead: None, mino_mode: false }
+        Mode::Practice { search: true, lookahead: None, mino_mode: false }
     } else {
         Mode::Sprint { target_lines: args.lines.map(u16::from).unwrap_or(40) }
     };
@@ -195,7 +195,7 @@ fn run_game(
                     debug!(target: "input", "{input_event:?}");
                     let t = Instant::now();
                     replay.push(input_event, t);
-                    new_piece |= game.handle(Event::Input(input_event), t, player)
+                    new_piece |= game.handle_event(Event::Input(input_event), t, player)
                 }
             }
             Err(Timeout) => {
@@ -206,7 +206,7 @@ fn run_game(
                     if t < now {
                         game.timers.pop_front();
                         debug!(target: "timer","{timer_event:?}");
-                        new_piece |= game.handle(Event::Timer(timer_event), now, player);
+                        new_piece |= game.handle_event(Event::Timer(timer_event), now, player);
                     }
                 }
             }
