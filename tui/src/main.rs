@@ -12,18 +12,18 @@ use std::{
 };
 
 use clap::{
+    builder::{styling::AnsiColor::*, Styles},
     Parser,
-    builder::{Styles, styling::AnsiColor::*},
 };
 use directories::ProjectDirs;
 use graphics::RawMode;
 use input::EventLoop;
-use log::{LevelFilter, debug, error};
+use log::{debug, error, LevelFilter};
 use rand::prelude::*;
 use tetris::{
-    Event, Game, GameState, InputEvent, Mode,
     replay::Replay,
     sound::{Sink, SoundPlayer},
+    Event, Game, GameState, InputEvent, Mode,
 };
 use web_time::Instant;
 
@@ -78,7 +78,7 @@ fn main() {
     let input = EventLoop::start(keys);
     let mut game = Game::new(config);
     game.mode = if args.practice {
-        Mode::Practice {}
+        Mode::TrainingLab { search: true, lookahead: None }
     } else {
         Mode::Sprint { target_lines: args.lines.map(u16::from).unwrap_or(40) }
     };
@@ -90,12 +90,39 @@ fn main() {
     while run_game(&mut game, &input, &player, &replay_dir) {}
 }
 
+// plan for how to integrate tetrizz search algorithm
+//
+// 1. call the algorithm once per placement
+//      a. for now i'll probably just do this in the same thread and ignore the delays that it
+//      introduces, but long term i'll want to background this and redraw the current state of the
+//      search results as they update
+// 2. apply some manual rule to filter through the options (e.g. only show z spins)
+//      a. ideally this should be applied in the search algorithm itself to focus the beam search
+//      b. or we might move away from beam search as an approach
+// 3. display the options, either rendered in the UI or printed to the log
+
 fn run_game(
     game: &mut Game,
     input: &EventLoop,
     player: &SoundPlayer<impl Sink>,
     replay_dir: &Path,
 ) -> bool {
+    let eval = &tetrizz::eval::Eval::new(
+        -79.400375,
+        -55.564907,
+        -125.680145,
+        -170.41902,
+        10.167948,
+        -172.78625,
+        -478.7291,
+        86.84883,
+        368.89203,
+        272.57874,
+        28.938646,
+        -104.59018,
+        -496.8832,
+        458.29822,
+    );
     let (width, height) = get_size();
     if width < 40 || height < 22 {
         panic!("screen too small");
@@ -107,11 +134,45 @@ fn run_game(
     replay.start();
 
     graphics::draw(width as i16, height as i16, game).unwrap();
+    let mut new_piece = false;
 
     let done = loop {
+        if game.mode.search_enabled() && new_piece {
+            // call search algorithm
+            log::info!("upcoming: {:?}", game.upcomming);
+            log::info!("hold: {:?}", game.hold);
+            log::info!("current: {:?}", game.current);
+            let (tetrizz_game, queue) = game.as_tetrizz_game_and_queue();
+            log::info!("queue: {queue:?}");
+            log::info!("hold: {:?}", tetrizz_game.hold);
+            let search_loc = tetrizz::movegen::movegen(&tetrizz_game, queue[0]);
+            let heap = tetrizz::beam_search::search_results(
+                &tetrizz_game,
+                &search_loc,
+                queue,
+                eval,
+                7,
+                3000,
+            );
+            let mut spins = vec![];
+            for node in heap.iter() {
+                for (m, placement_info) in node.moves.iter() {
+                    if placement_info.lines_cleared > 0 {
+                        if m.spun {
+                            spins.push(node.clone());
+                        }
+                        break;
+                    }
+                }
+            }
+            spins.sort_by_key(|s| s.score);
+            spins.sort_by_key(|s| s.moves.iter().take_while(|m| !m.1.spin).count());
+            game.spins = spins;
+            new_piece = false;
+        }
+        use mpsc::RecvTimeoutError::*;
         use GameState::*;
         use InputEvent::*;
-        use mpsc::RecvTimeoutError::*;
         let now = Instant::now();
         let redraw_timeout = Duration::from_millis(if game.state == Done { 10000 } else { 100 });
         let deadline = game
@@ -134,7 +195,7 @@ fn run_game(
                     debug!(target: "input", "{input_event:?}");
                     let t = Instant::now();
                     replay.push(input_event, t);
-                    game.handle(Event::Input(input_event), t, player);
+                    new_piece |= game.handle(Event::Input(input_event), t, player)
                 }
             }
             Err(Timeout) => {
@@ -145,7 +206,7 @@ fn run_game(
                     if t < now {
                         game.timers.pop_front();
                         debug!(target: "timer","{timer_event:?}");
-                        game.handle(Event::Timer(timer_event), now, player);
+                        new_piece |= game.handle(Event::Timer(timer_event), now, player);
                     }
                 }
             }

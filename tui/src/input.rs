@@ -6,7 +6,7 @@ use std::{
     thread,
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, Result};
 use tetris::InputEvent;
 
 use crate::settings::keys::*;
@@ -62,8 +62,17 @@ impl EventLoop {
                 (('r', 0, true), Restart),
                 (('q', 0, true), Quit),
                 (('c', CTRL, true), Quit),
+                (('1', 0, true), ShowSolution(1)),
+                (('2', 0, true), ShowSolution(2)),
+                (('3', 0, true), ShowSolution(3)),
+                (('4', 0, true), ShowSolution(4)),
+                (('5', 0, true), ShowSolution(5)),
+                (('6', 0, true), ShowSolution(6)),
+                (('7', 0, true), ShowSolution(7)),
+                (('8', 0, true), ShowSolution(8)),
+                (('9', 0, true), ShowSolution(9)),
+                (('0', 0, true), ShowSolution(0)),
                 (('u', 0, true), Undo),
-                // (('r', CTRL, true), Redo),
             ]
             .into_iter()
             .map(|(k, i)| (k.into(), i))

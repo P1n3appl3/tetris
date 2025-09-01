@@ -36,10 +36,11 @@ img.icon {
     float: left;
     position: relative;
     flex-direction: row;
-    width: 500px;
+    width: 700px;
     transform: translate(0px);
 }
 #left {
+    align-items: right;
     margin-right: 24px;
     float: left;
 }
