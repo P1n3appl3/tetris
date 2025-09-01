@@ -2,13 +2,9 @@ mod fps;
 mod graphics;
 mod input;
 
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
-use std::sync::mpsc::{self, channel, Receiver};
+use std::sync::mpsc::{Receiver, channel};
 
 use log::info;
-use tetris::game::Lookahead;
 use tetris::sound::{NullSink, Sink, SoundPlayer};
 use tetris::{Config, Event, Game, GameState};
 use tetrizz::eval::Eval;
@@ -97,7 +93,7 @@ pub async fn main() -> Result<(), JsValue> {
                 &spins_div,
                 &rx,
                 &sound,
-                &eval,
+                eval,
                 &mut new_piece,
             )
         }

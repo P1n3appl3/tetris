@@ -1,4 +1,3 @@
-use core::fmt;
 use std::{
     io::{self, Read as _, StdoutLock, Write},
     os::unix::prelude::AsRawFd,
@@ -11,11 +10,11 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use log::error;
 use ringbuffer::RingBuffer;
 use termios::*;
-use tetris::{Color, Game, GameState, Mode, Piece, PieceLocation, Rotation, BG_COLOR, LOST_COLOR};
+use tetris::{BG_COLOR, Color, Game, GameState, LOST_COLOR, Mode, Piece, PieceLocation, Rotation};
 use web_time::Instant;
 
 macro_rules! csi {
@@ -96,7 +95,7 @@ fn draw_spins(o: &mut StdoutLock, game: &Game, (ox, oy): (i16, i16)) -> Result<(
     set_color(o, BG_COLOR)?;
     let spin_text = game.display_spins().to_string();
     for (id, line) in spin_text.lines().enumerate() {
-        draw_text(o, (ox - 30, oy + 5 + id as i16), text_color, &line)?;
+        draw_text(o, (ox - 30, oy + 5 + id as i16), text_color, line)?;
     }
     if let Some((suggestion, solution)) = &game.solution {
         // render selected solution

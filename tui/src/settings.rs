@@ -5,8 +5,8 @@ use directories::ProjectDirs;
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use rodio::Source;
 use tetris::{
-    sound::{Action, Clear, Meta, Sink, SoundPlayer},
     Config,
+    sound::{Action, Clear, Meta, Sink, SoundPlayer},
 };
 
 use crate::input::Bindings;

@@ -6,7 +6,7 @@ use std::{
     thread,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use tetris::InputEvent;
 
 use crate::settings::keys::*;
