@@ -1,4 +1,5 @@
-pub mod game;
+mod game;
+pub mod movegen;
 pub mod replay;
 pub mod sound;
 #[cfg(test)]
