@@ -1,7 +1,8 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, fmt};
 
-use log::debug;
+use log::{debug, info};
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
+use tetrizz::beam_search::Node;
 use web_time::{Instant, SystemTime};
 
 use crate::{
@@ -11,11 +12,40 @@ use crate::{
 
 pub type Board = [[Cell; 10]; 50]; // hope no one stacks higher than this 👀
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
+pub struct Lookahead {
+    /// number of placements before board will render again
+    pub min_placements: usize,
+    /// Amount of time user has to stop making inputs after min_placements has been reached for
+    /// board to render
+    ///
+    /// unit: frames
+    pub timeout: u16,
+    board_visible: bool,
+    next_piece_goal: usize,
+    // state
+    // /// count of pieces per burst, for proper undo support
+    // bursts: VecDeque<u8>,
+}
+
+impl Lookahead {
+    pub fn new(min_placements: usize, timeout: u16) -> Self {
+        Self { min_placements, timeout, board_visible: true, next_piece_goal: min_placements }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Mode {
-    Sprint { target_lines: u16 },
+    Sprint {
+        target_lines: u16,
+    },
     // Cheese { target_lines: u16 },
-    Practice,
+    TrainingLab {
+        lookahead: Option<Lookahead>,
+        search: bool,
+        mino_mode: bool,
+        // search config
+    },
 }
 
 impl Mode {
@@ -29,26 +59,52 @@ impl Mode {
     fn allows_undo(&self) -> bool {
         match self {
             Mode::Sprint { .. } => false,
-            Mode::Practice => true,
+            Mode::TrainingLab { .. } => true,
+        }
+    }
+
+    pub fn search_enabled(&self) -> bool {
+        match self {
+            Mode::Sprint { .. } => false,
+            Mode::TrainingLab { search, .. } => *search,
+        }
+    }
+
+    fn lookahead_timeout(&self) -> u16 {
+        match self {
+            Mode::TrainingLab { lookahead: Some(lookahead), .. } => lookahead.timeout,
+            _ => unreachable!(),
+        }
+    }
+
+    fn start(&mut self) {
+        match self {
+            Mode::TrainingLab { lookahead: Some(lookahead), .. } => {
+                lookahead.board_visible = true;
+                lookahead.next_piece_goal = lookahead.min_placements;
+            }
+            _ => {}
         }
     }
 }
 
 #[derive(Clone)]
 pub struct Moment {
-    pub board: [[Cell; 10]; 50],
-    pub current: Piece,
+    pub board: [[Cell; 10]; 50], // hope no one stacks higher than this 👀
+    pub current: PieceLocation,
     pub hold: Option<Piece>,
     pub upcomming: ConstGenericRingBuffer<Piece, 14>,
+    pub spins: Vec<Node>,
 }
 
 #[derive(Clone)]
 pub struct Game {
     pub board: Board,
     pub upcomming: ConstGenericRingBuffer<Piece, 14>,
-    pub current: (Piece, (i8, i8), Rotation),
+    pub current: PieceLocation,
     pub hold: Option<Piece>,
     pub lines: u16,
+    pub pieces: usize,
     pub mode: Mode,
     pub config: Config,
     pub timers: VecDeque<(Instant, TimerEvent)>,
@@ -62,7 +118,144 @@ pub struct Game {
     pub spin: bool, // TODO: detection
     pub state: GameState,
     pub rng: StdRng,
+    pub spins: Vec<Node>,
+    pub solution: Option<(Node, Box<Game>)>,
     pub history: VecDeque<Moment>,
+}
+
+struct SpinFormatter<'a>(&'a Game);
+
+impl fmt::Display for SpinFormatter<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let spins = Game::spin_shortlist(&self.0.spins);
+        if let Some((suggestion, _)) = &self.0.solution {
+            // render selected solution
+            let last = suggestion.moves.len() - 1;
+            log::info!("{last}");
+            for (m, i) in suggestion.moves.iter() {
+                let b2b = if m.spun && i.lines_cleared > 0 { " +1 b2b" } else { "" };
+                writeln!(f, "{:?} x:{} y:{} {:?}{}", m.piece, m.x, m.y, m.rotation, b2b)?;
+                if !b2b.is_empty() {
+                    break;
+                }
+            }
+        } else {
+            if self.0.history.is_empty() {
+                return Ok(());
+            }
+            let prev = self.0.history.back().unwrap();
+            // render available solutions
+            for (id, spin) in spins.iter().enumerate() {
+                let spin_move_position =
+                    spin.moves.iter().position(|m| m.0.spun && m.1.lines_cleared > 0).unwrap();
+                let spin_move = spin.moves[spin_move_position];
+                let prev_moves = prev.spins.iter().map(|node| &node.moves).collect::<Vec<_>>();
+
+                let matches_previous_move = prev_moves.iter().any(|&prev_moveset| {
+                    let prev_spin_move_position = prev_moveset
+                        .iter()
+                        .position(|m| m.0.spun && m.1.lines_cleared > 0)
+                        .unwrap();
+                    let prev_spin_move = prev_moveset[prev_spin_move_position];
+                    prev_spin_move.0.piece == spin_move.0.piece
+                        && prev_spin_move_position > spin_move_position
+                });
+                let solution_indicator = if matches_previous_move { "→" } else { "★" };
+                writeln!(
+                    f,
+                    "{}: {} {:?} spin in {} pieces clearing {} lines",
+                    id + 1,
+                    solution_indicator,
+                    spin_move.0.piece,
+                    spin_move_position,
+                    spin_move.1.lines_cleared,
+                )?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Game {
+    pub fn as_tetrizz_game_and_queue(&self) -> (tetrizz::data::Game, Vec<tetrizz::data::Piece>) {
+        let mut queue: Vec<_> = std::iter::once(self.current.piece.into())
+            .chain(self.upcomming.iter().cloned().map(Into::into))
+            .collect();
+        let game = tetrizz::data::Game {
+            board: self.as_tetrizz_board(),
+            hold: self.hold.map(Into::into).unwrap_or_else(|| queue.remove(0)),
+            b2b: 0,
+            b2b_deficit: 0,
+        };
+        (game, queue)
+    }
+    fn as_tetrizz_board(&self) -> tetrizz::data::Board {
+        let mut board = tetrizz::data::Board { cols: [tetrizz::data::Column(0); 10] };
+        for column in 0..10 {
+            for row in 0..50 {
+                if self.board[row][column] != Cell::Empty {
+                    board.cols[column].0 |= 1 << row;
+                }
+            }
+        }
+        board
+    }
+
+    pub fn spin_shortlist(nodes: &[Node]) -> Vec<Node> {
+        let mut bounties =
+            vec![Piece::I, Piece::J, Piece::L, Piece::T, Piece::Z, Piece::S, Piece::T];
+        let mut spins = vec![];
+        'find_bounties: for node in nodes.iter() {
+            for (m, placement_info) in node.moves.iter() {
+                if m.spun && placement_info.lines_cleared > 0 {
+                    let piece = m.piece.into();
+                    let bounty = bounties.iter().position(|&b| b == piece);
+                    if let Some(bounty) = bounty {
+                        spins.push(node.clone());
+                        bounties.remove(bounty);
+                        if bounties.is_empty() {
+                            break 'find_bounties;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        spins.sort_by_key(|s| s.moves.iter().take_while(|m| m.1.lines_cleared == 0).count());
+        spins
+    }
+
+    pub fn display_spins(&self) -> impl fmt::Display + '_ {
+        SpinFormatter(self)
+    }
+
+    pub fn draw_only_mino(&self) -> bool {
+        match self.mode {
+            Mode::Sprint { .. } => false,
+            Mode::TrainingLab { mino_mode, .. } => mino_mode,
+        }
+    }
+
+    pub fn should_draw_board(&self) -> bool {
+        match &self.mode {
+            Mode::TrainingLab { lookahead: Some(lookahead), .. } => lookahead.board_visible,
+            _ => true,
+        }
+    }
+
+    pub fn should_draw_hold(&self) -> bool {
+        match &self.mode {
+            Mode::TrainingLab { lookahead: Some(lookahead), .. } => lookahead.board_visible,
+            _ => true,
+        }
+    }
+
+    pub fn should_draw_queue(&self) -> bool {
+        match &self.mode {
+            Mode::TrainingLab { lookahead: Some(lookahead), .. } => lookahead.board_visible,
+            _ => true,
+        }
+    }
 }
 
 impl Game {
@@ -72,9 +265,10 @@ impl Game {
             rng: StdRng::from_os_rng(),
             board: [[Cell::Empty; 10]; 50],
             upcomming: Default::default(),
-            current: (Piece::I, (3, 21), Rotation::North),
+            current: PieceLocation::new(Piece::I, (3, 21), Rotation::North),
             hold: None,
             lines: 0,
+            pieces: 0,
             mode: Mode::Sprint { target_lines: 40 },
             timers: Default::default(),
             started_right: None,
@@ -86,6 +280,8 @@ impl Game {
             can_hold: true,
             spin: false,
             state: GameState::Done,
+            spins: Default::default(),
+            solution: None,
             history: VecDeque::new(),
         }
     }
@@ -95,6 +291,7 @@ impl Game {
         self.board = [[Cell::Empty; 10]; 50];
         self.hold = None;
         self.lines = 0;
+        self.pieces = 0;
         self.upcomming.clear();
         self.rng = StdRng::seed_from_u64(seed.unwrap_or_else(|| {
             SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as u64
@@ -104,9 +301,11 @@ impl Game {
         self.start_time = None;
         if matches!(self.mode, Mode::Sprint { .. }) {
             while let Some(Piece::Z | Piece::S) = self.upcomming.front() {
-                self.pop_piece();
+                self.upcomming.clear();
+                self.fill_bag();
             }
         }
+        self.mode.start();
         sound.play(Meta::Go).ok();
         // TODO: combine "ready" and "go" sounds
         // TODO: make startup time configurable or maybe even based on the sound length?
@@ -114,7 +313,27 @@ impl Game {
         self.set_timer(TimerEvent::Start);
     }
 
-    pub fn handle(&mut self, event: Event, time: Instant, sound: &SoundPlayer<impl Sink>) {
+    pub fn handle(&mut self, event: Event, time: Instant, sound: &SoundPlayer<impl Sink>) -> bool {
+        use {Event::*, TimerEvent::*};
+        let ret = self._handle(event, time, sound);
+        match event {
+            Input(kind) => match &mut self.mode {
+                Mode::TrainingLab { lookahead: Some(lookahead), .. } => {
+                    if lookahead.board_visible && kind != InputEvent::Undo {
+                        lookahead.board_visible = false;
+                    } else if self.pieces >= lookahead.next_piece_goal {
+                        self.clear_timer(Lookahead);
+                        self.set_timer(Lookahead);
+                    }
+                }
+                _ => {}
+            },
+            _ => {}
+        }
+        ret
+    }
+
+    pub fn _handle(&mut self, event: Event, time: Instant, sound: &SoundPlayer<impl Sink>) -> bool {
         use {Event::*, GameState::*, InputEvent::*, TimerEvent::*};
         self.time = time;
         debug!("handling event: {event:?}");
@@ -178,33 +397,43 @@ impl Game {
             }
             Input(Undo) => {
                 if !self.mode.allows_undo() {
-                    return;
+                    return false;
                 }
                 let Some(prev) = self.history.pop_back() else {
-                    return;
+                    return false;
                 };
                 self.board = prev.board;
-                self.spawn(prev.current);
+                assert!(
+                    self.spawn(prev.current.piece),
+                    "shouldn't be invalid since that piece was able to be placed"
+                );
                 self.hold = prev.hold;
                 self.upcomming = prev.upcomming;
+                self.pieces -= 1;
+                self.spins = prev.spins;
+                match &mut self.mode {
+                    Mode::TrainingLab { lookahead: Some(lookahead), .. } => {
+                        lookahead.board_visible = true;
+                        lookahead.next_piece_goal = self.pieces + lookahead.min_placements;
+                    }
+                    _ => {}
+                }
             }
             Input(Hard) | Timer(Lock | Extended | Timeout) => {
-                let moment = Moment {
-                    board: self.board,
-                    current: self.current.0,
-                    hold: self.hold,
-                    upcomming: self.upcomming.clone(),
-                };
+                self.hard_drop(sound);
                 // at 536 bytes per Moment, we store 200 moves (107.2kB) max
                 if self.history.len() > 200 {
                     self.history.pop_front();
                 }
-                self.history.push_back(moment);
-                self.hard_drop(sound)
+                return true;
             }
             Timer(t @ (SoftDrop | Gravity)) => {
                 if self.state == Running {
-                    self.try_drop();
+                    if self.config.soft_drop == 0 && t == SoftDrop {
+                        while self.try_drop() {}
+                    } else {
+                        self.try_drop();
+                    }
                 }
                 self.set_timer(t);
             }
@@ -236,6 +465,20 @@ impl Game {
             Input(Restart | Quit) => unreachable!("should be handled in outer event loop"),
 
             // TODO: add das sound effect
+            Input(ShowSolution(ind)) => match ind {
+                0 => {
+                    self.solution = None;
+                }
+                ind => {
+                    let suggestion = &Game::spin_shortlist(&self.spins)[ind as usize - 1];
+                    let mut game = self.clone();
+                    game.config.ghost = false;
+                    for (m, _) in &suggestion.moves {
+                        info!("{:?} x:{} y:{} {:?} spin:{}", m.piece, m.x, m.y, m.rotation, m.spun);
+                    }
+                    self.solution = Some((suggestion.clone(), Box::new(game)));
+                }
+            },
             Timer(DasLeft | DasRight) => {
                 if self.state == Running {
                     self.handle_das()
@@ -247,15 +490,22 @@ impl Game {
             Timer(Are) => {
                 todo!()
             }
+            Timer(Lookahead) => match &mut self.mode {
+                Mode::TrainingLab { lookahead: Some(lookahead), .. } => {
+                    lookahead.board_visible = true;
+                    lookahead.next_piece_goal = self.pieces + lookahead.min_placements;
+                }
+                _ => {}
+            },
         };
         // TODO: set lock timers if on the ground and they arent already set
+        false
     }
 
-    pub fn ghost_pos(&self) -> (i8, i8) {
-        let (piece, pos, rot) = self.current;
-        let current_pos = piece.get_pos(rot, pos);
+    pub fn ghost_pos(&self) -> PieceLocation {
+        let current_pos = self.current.blocks();
         let mut ghost = current_pos;
-        let mut y = pos.1;
+        let mut y = self.current.pos.1;
         loop {
             let next = ghost.map(|(x, y)| (x, y - 1));
             if !self.check_valid(next) {
@@ -264,7 +514,10 @@ impl Game {
             y -= 1;
             ghost = next;
         }
-        (pos.0, y)
+        let pos = (self.current.pos.0, y);
+        let rot = self.current.rot;
+        let piece = self.current.piece;
+        PieceLocation { piece, pos, rot }
     }
 
     fn set_timer(&mut self, t: TimerEvent) {
@@ -274,12 +527,21 @@ impl Game {
             DasLeft | DasRight => c.das,
             Arr => c.arr,
             SoftDrop => c.soft_drop,
-            Gravity => c.gravity,
+            Gravity => {
+                let Some(gravity) = c.gravity else { return };
+                gravity
+            }
             Lock => c.lock_delay.0,
             Extended => c.lock_delay.1,
-            Timeout => c.lock_delay.2,
+            Timeout => {
+                if c.gravity.is_none() {
+                    return;
+                };
+                c.lock_delay.2
+            }
             Start => 60,
             Are => todo!(),
+            Lookahead => self.mode.lookahead_timeout(),
         };
         let time = self.time + FRAME * frames as u32;
         let idx = self.timers.partition_point(|&(i, _)| i < time);
@@ -293,6 +555,14 @@ impl Game {
     fn hard_drop(&mut self, sound: &SoundPlayer<impl Sink>) {
         while self.try_drop() {}
         let old_lines = self.lines;
+        let moment = Moment {
+            board: self.board,
+            current: self.current,
+            hold: self.hold,
+            upcomming: self.upcomming.clone(),
+            spins: self.spins.clone(),
+        };
+        self.history.push_back(moment);
         // TODO: redo with "piece placement result struct"
         if self.lock() {
             // TODO: maybe just play both at the same time?
@@ -332,7 +602,7 @@ impl Game {
         self
     }
 
-    fn check_valid(&self, pos: Pos) -> bool {
+    pub fn check_valid(&self, pos: Pos) -> bool {
         pos.into_iter().all(|(x, y)| {
             (0..10).contains(&x)
                 && (0..30).contains(&y)
@@ -340,10 +610,11 @@ impl Game {
         })
     }
 
-    fn lock(&mut self) -> bool {
-        let (p, pos, rot) = self.current;
-        for (x, y) in p.get_pos(rot, pos) {
-            self.board[y as usize][x as usize] = Cell::Piece(p);
+    pub fn lock(&mut self) -> bool {
+        info!("pos: {:?}", self.current.pos);
+        for (x, y) in self.current.blocks() {
+            info!("{x} {y}");
+            self.board[y as usize][x as usize] = Cell::Piece(self.current.piece);
         }
         for i in (0..23).rev() {
             if self.board[i].iter().all(|c| matches!(c, Cell::Piece(_))) {
@@ -354,6 +625,7 @@ impl Game {
             }
         }
         let next = self.pop_piece();
+        self.pieces += 1;
         self.spawn(next)
     }
 
@@ -401,37 +673,41 @@ impl Game {
             self.clear_timer(Timeout);
         }
         self.can_hold = true;
-        let pos = (3, 21);
-        let rot = Rotation::North;
-        if !self.check_valid(next.get_pos(rot, pos)) {
+        let pos = (4, 21);
+        let rotation = Rotation::North;
+        let next = PieceLocation::new(next, pos, rotation);
+        if !self.check_valid(next.blocks()) {
             return false;
         }
-        self.current = (next, (3, 21), Rotation::North);
+        self.current = next;
         self.try_drop();
         self.set_timer(if self.soft_dropping { TimerEvent::SoftDrop } else { TimerEvent::Gravity });
         self.set_timer(TimerEvent::Timeout);
         true
     }
 
-    fn hold(&mut self) -> bool {
+    pub fn hold(&mut self) -> bool {
         let piece = if let Some(p) = self.hold {
-            self.hold = Some(self.current.0);
+            self.hold = Some(self.current.piece);
             p
         } else {
-            self.hold = Some(self.current.0);
+            self.hold = Some(self.current.piece);
             self.pop_piece()
         };
         self.spawn(piece)
     }
 
     fn try_rotate(&mut self, dir: Spin) -> bool {
-        let (piece, pos, rot) = self.current;
+        let PieceLocation { piece, pos, rot } = self.current;
         let new_rot = rot.rotate(dir);
-        let new_pos = piece.get_pos(new_rot, pos);
-        for (dx, dy) in piece.get_your_kicks(rot, dir) {
+        let new_current = PieceLocation::new(piece, pos, new_rot);
+        let new_pos = new_current.blocks();
+        let kicks = piece.get_your_kicks(rot, dir);
+        for (dx, dy) in kicks {
             let displaced = new_pos.map(|(x, y)| (x + dx, y + dy));
             if self.check_valid(displaced) {
-                self.current = (self.current.0, (pos.0 + dx, pos.1 + dy), new_rot);
+                self.current =
+                    PieceLocation::new(self.current.piece, (pos.0 + dx, pos.1 + dy), new_rot);
                 self.handle_das();
                 use TimerEvent::*;
                 if self.can_drop() {
@@ -443,6 +719,10 @@ impl Game {
                 }
                 return true;
             }
+        }
+        if piece == Piece::I {
+            info!("pos: {pos:?}");
+            info!("kicks: {kicks:?}");
         }
         false
     }
@@ -456,15 +736,16 @@ impl Game {
     }
 
     fn can_drop(&self) -> bool {
-        let (piece, pos, rot) = self.current;
-        self.check_valid(piece.get_pos(rot, pos).map(|(x, y)| (x, y - 1)))
+        self.check_valid(self.current.blocks().map(|(x, y)| (x, y - 1)))
     }
 
     fn try_move(&mut self, (dx, dy): (i8, i8)) -> bool {
-        let (piece, (x, y), rot) = self.current;
-        let pos = (x + dx, y + dy);
-        if self.check_valid(piece.get_pos(rot, pos)) {
-            self.current = (piece, pos, rot);
+        let mut next_current = self.current;
+        next_current.pos.0 += dx;
+        next_current.pos.1 += dy;
+
+        if self.check_valid(next_current.blocks()) {
+            self.current = next_current;
             use TimerEvent::*;
             self.clear_timer(Lock);
             if self.can_drop() {

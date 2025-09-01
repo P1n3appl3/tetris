@@ -5,6 +5,7 @@ default-members = ["tui"]
 [workspace.dependencies]
 log = "0.4"
 rand = "0.9"
+tetrizz = { version = "0.1.0", git = "https://github.com/yaahc/tetrizz.git" }
 anyhow = "1"
 futures = "0.3"
 serde = { version = "1", features = ["derive"] }
@@ -22,6 +23,7 @@ edition = "2024"
 [dependencies]
 log.workspace = true
 rand.workspace = true
+tetrizz.workspace = true
 serde.workspace = true
 strum.workspace = true
 anyhow.workspace = true

@@ -8,6 +8,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 tetris = { path = ".." }
+tetrizz.workspace = true
 image = { version = "0.25", default-features = false, features = [
     "png",
     "webp",

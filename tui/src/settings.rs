@@ -5,8 +5,8 @@ use directories::ProjectDirs;
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use rodio::Source;
 use tetris::{
-    Config,
     sound::{Action, Clear, Meta, Sink, SoundPlayer},
+    Config,
 };
 
 use crate::input::Bindings;
@@ -47,7 +47,7 @@ pub fn load(
     let config = Config {
         das: get_config("das", config_node)? as u16,
         arr: get_config("arr", config_node)? as u16,
-        gravity: get_config("gravity", config_node)? as u16,
+        gravity: get_config("gravity", config_node).ok().map(|i| i as u16),
         soft_drop: get_config("soft-drop", config_node)? as u16,
         lock_delay: (
             get_config("lock", config_node)? as u16,

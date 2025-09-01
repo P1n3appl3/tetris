@@ -6,8 +6,8 @@ use ringbuffer::RingBuffer;
 // use pretty_assertions::assert_eq;
 use super::{InputEvent::*, *};
 use crate::{
-    Event,
     sound::{NullSink, SoundPlayer},
+    Event,
 };
 
 impl From<PieceType> for Piece {
@@ -62,10 +62,12 @@ fn get_board(page: &fumen::Page) -> game::Board {
     board
 }
 
-fn get_piece(page: &fumen::Page) -> (Piece, (i8, i8), Rotation) {
-    page.piece
-        .map(|p| (p.kind.into(), (p.x as i8 - 1, p.y as i8 + 1), p.rotation.into()))
-        .unwrap_or((Piece::I, (3, 20), Rotation::North))
+fn get_piece(page: &fumen::Page) -> PieceLocation {
+    let (piece, pos, rot) = page
+        .piece
+        .map(|p| (p.kind.into(), (p.x as i8, p.y as i8), p.rotation.into()))
+        .unwrap_or((Piece::I, (3, 20), Rotation::North));
+    PieceLocation { piece, pos, rot }
 }
 
 #[derive(Eq, PartialEq, Clone)]
@@ -83,12 +85,12 @@ impl std::fmt::Debug for BoardString {
     }
 }
 
-fn render(board: game::Board, (piece, pos, rotation): (Piece, (i8, i8), Rotation)) -> BoardString {
+fn render(board: game::Board, loc: PieceLocation) -> BoardString {
     let mut s = BoardString("\n----------------------\n".to_owned());
     for y in (0..20).rev() {
         s.0.push('|');
         for x in 0..10 {
-            if piece.get_pos(rotation, pos).contains(&(x as i8, y as i8)) {
+            if loc.blocks().contains(&(x as i8, y as i8)) {
                 s.0.push_str("..");
                 continue;
             }
@@ -119,7 +121,7 @@ where
     let t = Instant::now();
     let first = f.pages.first().unwrap();
     g.board = get_board(first);
-    let temp = g.current.0;
+    let temp = g.current.piece;
     g.current = get_piece(first);
     g.upcomming.enqueue(temp); // so we don't run out when we harddrop
     println!("{}", render(g.board, g.current));
