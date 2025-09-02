@@ -92,6 +92,7 @@ pub struct Moment {
     pub hold: Option<Piece>,
     pub upcomming: ConstGenericRingBuffer<Piece, 14>,
     pub spins: Vec<Node>,
+    pub pieces_placed: usize,
 }
 
 #[derive(Clone)]
@@ -402,7 +403,7 @@ impl Game {
                 );
                 self.hold = prev.hold;
                 self.upcomming = prev.upcomming;
-                self.pieces -= 1;
+                self.pieces = prev.pieces_placed;
                 self.spins = prev.spins;
                 if let Mode::TrainingLab { lookahead: Some(lookahead), .. } = &mut self.mode {
                     lookahead.board_visible = true;
@@ -541,17 +542,22 @@ impl Game {
         self.timers.retain(|&(_, ev)| ev != t)
     }
 
-    fn hard_drop(&mut self, sound: &SoundPlayer<impl Sink>) {
-        while self.try_drop() {}
-        let old_lines = self.lines;
+    fn push_moment(&mut self) {
         let moment = Moment {
             board: self.board,
             current: self.current,
             hold: self.hold,
             upcomming: self.upcomming.clone(),
             spins: self.spins.clone(),
+            pieces_placed: self.pieces,
         };
         self.history.push_back(moment);
+    }
+
+    fn hard_drop(&mut self, sound: &SoundPlayer<impl Sink>) {
+        while self.try_drop() {}
+        let old_lines = self.lines;
+        self.push_moment();
         // TODO: redo with "piece placement result struct"
         if self.lock() {
             // TODO: maybe just play both at the same time?
@@ -676,6 +682,7 @@ impl Game {
     }
 
     pub fn hold(&mut self) -> bool {
+        self.push_moment();
         let piece = if let Some(p) = self.hold {
             self.hold = Some(self.current.piece);
             p
