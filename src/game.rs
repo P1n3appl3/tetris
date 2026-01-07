@@ -438,9 +438,7 @@ impl Game {
                 sound.play(Meta::Go).ok();
             }
             Input(rot @ (Cw | Ccw | Flip)) => {
-                if self.try_rotate(rot.try_into().expect("should always be a rotation")) {
-                    sound.play(Action::Rotate).ok();
-                }
+                self.try_rotate(rot.try_into().expect("should always be a rotation"), sound);
                 // confirmed: jstris resets it even if you don't successfully rotate
                 self.clear_timer(Lock);
                 self.clear_timer(Extended);
@@ -697,13 +695,13 @@ impl Game {
         self.spawn(piece)
     }
 
-    fn try_rotate(&mut self, dir: Spin) -> bool {
+    fn try_rotate(&mut self, dir: Spin, sound: &SoundPlayer<impl Sink>) -> bool {
         let PieceLocation { piece, pos, rot } = self.current;
         let new_rot = rot.rotate(dir);
         let new_current = PieceLocation::new(piece, pos, new_rot);
         let new_pos = new_current.blocks();
         let kicks = piece.get_your_kicks(rot, dir);
-        for (dx, dy) in kicks {
+        for (i, (dx, dy)) in kicks.iter().enumerate() {
             let displaced = new_pos.map(|(x, y)| (x + dx, y + dy));
             if self.check_valid(displaced) {
                 self.current =
@@ -717,6 +715,9 @@ impl Game {
                     self.set_timer(Lock);
                     self.set_timer(Extended);
                 }
+                sound.play(Action::Rotate).ok();
+                if i != 0
+                // TODO: detect spins separate from rotations and play spin sound
                 return true;
             }
         }

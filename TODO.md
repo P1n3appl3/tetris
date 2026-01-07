@@ -3,7 +3,9 @@
 - show combo counter/attack lines with gauge
 - make rotation return whether or not a kick/spin happened (for different sound)
 - show lines remaining with different background above the last line
+- tgm style line on the border between mino and empty, scan from all 4 sides to generate
 - configure queue length
+- for attack popups show log like blox, fade out as it scrolls up. maybe animate(web)/color(cli) the newest entry for a short time
 
 ## tui
 
@@ -16,14 +18,14 @@
 ### web
 
 - try trunkrs.dev for development
-- add lib.rs/fumen and allow pasting in boards
-  - maybe use mxmoss.me/sketris instead of fumens...
 - add board size slider to graphics settings
 - hover css animation on border of details sections for settings
 
 # lab
 
 - finesse
+- add lib.rs/fumen and allow pasting in boards
+  - maybe use <https://mxmoss.me/sketris> instead of fumens...
 - paint minos on in any mode with either garbage or piece shape detection
 - follow replay (show ghost piece)
 - combo (4 wide like apotris)
@@ -40,7 +42,9 @@
 - setups from <https://four.lol>
   - give valid bags
   - track percent success
+  - spaced repetition
 - cheese race
+- pc solving <https://wirelyre.github.io/tetra-tools/pc-solver.html>
 
 ## visual references
 
